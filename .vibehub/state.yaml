@@ -1,0 +1,95 @@
+schema_version: 5
+project:
+  id: LaLaLandShow
+  name: LaLaLandShow
+  root: .
+current:
+  mode: evidence_drive
+  task_id: T-20260529133755-69e7bd66
+  run_id: R-20260529133755-405932d7
+  session_id: null
+  event_log_path: .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/events.jsonl
+  phase: align
+  phase_status: completed
+pointers:
+  task_pointer: .vibehub/tasks/current
+  run_pointer: .vibehub/tasks/T-20260529133755-69e7bd66/runs/current
+tasks:
+  active:
+  - T-20260529133755-69e7bd66
+flow:
+  align_lite: pending
+  align: completed
+  research: active
+  plan: pending
+  implement: pending
+  review_lite: pending
+  review: pending
+derived:
+  current:
+    phase: true
+    phase_status: true
+  flow: true
+  trace_path: .vibehub/derivation_trace.yaml
+observability:
+  level: best_effort
+  runtime_adapter: none
+  current_observation_sources:
+  - vibehub_generated
+autonomy:
+  level: high
+research:
+  required: true
+  status: required
+  scope: active_task
+  skipped_reason: null
+context:
+  current_pack: .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.md
+  current_manifest: .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.manifest.yaml
+  stale: false
+  generated_by: vibehub_backend
+agent_report:
+  status: not_started
+  validation_status: pending
+  last_sync_report: .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/sync/sync-20260529-154255.md
+handoff:
+  current: .vibehub/agent-view/handoff.md
+  status: available
+git:
+  baseline_commit: null
+  last_seen_head: null
+  dirty: true
+  changed_files_count: 14
+loop_detection:
+  status: warning
+  warnings:
+  - 循环警告：14 个变更文件已达到或超过 repeated_file_edits 阈值 8。
+metrics:
+  tasks:
+    active_count: 1
+  capabilities:
+    active_count: 1
+  sync:
+    avg_duration_ms: 48.0
+    last_mode: workspace
+  pack:
+    avg_size_tokens: 238.0
+    oversize_count: 0
+  schema:
+    validation_failure_rate: 0.0
+  events:
+    write_per_minute: 5.5716081215906295
+  subagent:
+    timeout_count: 0
+last_updated: 2026-05-29T15:42:55Z
+resume_hint: .vibehub/agent-view/current.md
+preferences:
+  locale: zh-CN
+sync:
+  last_synced_at: 2026-05-29T15:42:55Z
+  last_report: .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/sync/sync-20260529-154255.md
+  agent_view_sync: .vibehub/agent-view/sync.md
+  level: rebuild
+  reason: git_head_unreadable
+  questions:
+  - Git 当前有 14 个变更文件。这些变更是否都属于当前 VibeHub 任务？如不是，请说明哪些需要排除或另开任务。

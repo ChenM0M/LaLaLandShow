@@ -1,0 +1,146 @@
+# API Notes
+
+This file tracks the backend API contract as B0-B8 are implemented.
+
+Initial health endpoint:
+
+- `GET /healthz` returns `{ "status": "ok", "service": "lalalandshow-backend" }`.
+
+Student identity endpoints:
+
+- `POST /api/student/login`
+  - Public.
+  - Request: `{ "student_id": "1234567" }`.
+  - Creates a semi-registered student row on first login.
+  - Response: `{ "token": "...", "student": { ... }, "need_register": true|false, "pending_notice": null|{ ... } }`.
+- `POST /api/student/register`
+  - Student bearer token required.
+  - Request: `{ "class_code": "1103", "seat_no_in_class": 18, "display_name": "optional" }`.
+  - Completes or updates the student profile.
+  - Response: `{ "student": { ... }, "need_register": false }`.
+- `GET /api/student/me`
+  - Student bearer token required.
+  - Response: `{ "student": { ... }, "booking": null|{ ... }, "proxy_bookings": [] }`.
+- `POST /api/student/notice/ack`
+  - Student bearer token required.
+  - Clears `student.pending_notice` after the student has seen an admin adjustment notice.
+  - Response: `{ "student": { ... } }`.
+- `GET /api/seats/snapshot`
+  - Student bearer token required.
+  - Returns all 385 seats with `state` values: `free`, `locked`, `mine`, or `others`.
+- `GET /api/seats/stream`
+  - Student bearer token required.
+  - Server-Sent Events stream.
+  - Clients should load `/api/seats/snapshot` first, then connect to the stream.
+  - The stream emits a `ready` event on connect and emits `seat_changed` events after successful booking, release, and change writes.
+- `POST /api/seats/book`
+  - Student bearer token required.
+  - Request: `[{"seat_id": 101, "student_id": "1234567"}]`.
+  - Also accepts `{ "bookings": [...] }` for clients that prefer an envelope.
+  - The request must contain 1 to 3 unique seats, 1 to 3 unique seven-digit student IDs, and must include the authenticated student.
+  - Creates semi-registered companion student rows when needed.
+  - Response: `{ "bookings": [{ "seat_id": 101, "student_id": "1234567", "zone": "middle", "row_no": 1, "col_no": 1, "ticket_version": 1, "booked_at": "..." }] }`.
+  - Returns `409` before `booking_open_at`, after `booking_lock_at`, after `show_start_at`, when any requested seat is locked, or when any requested seat/student is already booked; the whole batch is rolled back.
+- `POST /api/seats/release`
+  - Student bearer token required.
+  - Releases the authenticated student's own booking.
+  - Response: `{ "released": { "seat_id": 101, "student_id": "1234567", "zone": "middle", "row_no": 1, "col_no": 1, "ticket_version": 1, "booked_at": "..." } }`.
+  - Returns `404` when the student has no booking.
+  - Returns `409` after `show_start_at`.
+- `POST /api/seats/change`
+  - Student bearer token required.
+  - Request: `{ "seat_id": 102 }`.
+  - Atomically moves the authenticated student's own booking to a different free, unlocked seat.
+  - Increments `ticket_version` so old ticket QR payloads can be rejected later.
+  - Response: `{ "previous": { ... }, "booking": { ... } }`.
+  - Returns `404` when the student has no booking or the target seat does not exist.
+  - Returns `409` before `booking_open_at`, when the target seat is locked/occupied, after `booking_lock_at`, or after `show_start_at`.
+- `GET /api/ticket/me`
+  - Student bearer token required.
+  - Available after `booking_lock_at`.
+  - Returns ticket JSON with play metadata, holder info, seat info, `ticket_version`, canonical QR payload, and signed `qr_token`.
+  - The QR token signs `{ "student_id", "seat_id", "ticket_version", "issued_at" }` with HMAC-SHA256 using `HMAC_SECRET`.
+  - Returns `404` when the student has no booking and `409` before tickets are available.
+- `GET /api/ticket/me/image`
+  - Student bearer token required.
+  - Available after `booking_lock_at`.
+  - Returns `image/png` as an attachment containing a simple ticket stub and QR code.
+- `POST /api/checker/login`
+  - Public.
+  - Request: `{ "username": "checker", "password": "..." }`.
+  - Checker/admin accounts are seeded from `CHECKER_USER`, `CHECKER_PASSWORD`, `ADMIN_USERS`, and `ADMIN_PASSWORDS`.
+  - Response: `{ "token": "...", "staff": { "username": "checker", "role": "checker" } }`.
+- `POST /api/checker/verify-qr`
+  - Checker or admin bearer token required.
+  - Request: `{ "qr_token": "..." }`.
+  - Verifies the HMAC signature, parses the QR payload, loads the current booking, and rejects stale QR codes when `seat_id` or `ticket_version` no longer matches.
+  - Response: `{ "valid": true, "method": "qr", "qr_payload": { ... }, "booking": { ... } }`.
+- `POST /api/checker/lookup`
+  - Checker or admin bearer token required.
+  - Request: `{ "student_id": "1234567" }`.
+  - Returns the current booking and prior check-in summary for manual verification.
+- `POST /api/checker/checkin`
+  - Checker or admin bearer token required.
+  - Request for QR approval: `{ "method": "qr", "qr_token": "..." }`.
+  - Request for manual approval: `{ "method": "manual", "student_id": "1234567" }`.
+  - Request for no-booking approval: `{ "method": "force_no_booking", "student_id": "1234567" }`.
+  - Writes `checkin_events` with `result = "approved"` and computes `is_first_scan`; repeated scans are accepted but return `is_first_scan: false`.
+- `GET /api/checker/stats`
+  - Checker or admin bearer token required.
+  - Response: `{ "checked_in": 120, "total": 385, "last_minute_rate": 8 }`.
+- `GET /api/checker/export-roster.csv`
+  - Checker or admin bearer token required.
+  - Downloads a CSV roster with booking, seat, check-in count, and first/last scan timestamps.
+- `POST /api/admin/login`
+  - Public.
+  - Request: `{ "username": "admin", "password": "..." }`.
+  - Only accepts `admin` staff accounts; checker accounts receive `403`.
+  - Response: `{ "token": "...", "staff": { "username": "admin", "role": "admin" } }`.
+- `GET /api/admin/seats`
+  - Admin bearer token required.
+  - Returns every seat with block state and optional booking detail, including student profile fields and custom-label occupancy.
+- `POST /api/admin/seats/:id/assign`
+  - Admin bearer token required.
+  - Assign request: `{ "student_id": "1234567", "force_release_existing": true|false }`.
+  - Custom occupancy request: `{ "custom_label": "Crew hold", "force_release_existing": true|false }`.
+  - Release request: `{ "release": true }`.
+  - Returns `409` when the target seat or target student already has a booking and `force_release_existing` is not true.
+  - Forced changes write audit logs and set `students.pending_notice` for affected students.
+- `POST /api/admin/seats/:id/lock`
+  - Admin bearer token required.
+  - Request: `{ "lock": true, "block_reason": "optional" }`; unlock with `{ "lock": false }`.
+  - Updates `seats.is_blocked` and writes `audit_logs.action = 'admin_lock'`.
+- `GET /api/admin/students`
+  - Admin bearer token required.
+  - Query params: `page`, `page_size`, `class_code`, `search`.
+  - Response: `{ "students": [ ... ], "total": 0, "page": 1, "page_size": 50 }`.
+- `GET /api/admin/audit-logs`
+  - Admin bearer token required.
+  - Query params: `page`, `page_size`, `action`, `actor`.
+- `GET /api/admin/checkin-events`
+  - Admin bearer token required.
+  - Query params: `page`, `page_size`, `student_id`, `method`.
+- `GET /api/admin/config/:key`
+  - Admin bearer token required.
+  - Returns `{ "key": "...", "value_json": ..., "updated_by": "...", "updated_at": "..." }`.
+- `PUT /api/admin/config/:key`
+  - Admin bearer token required.
+  - Request: `{ "value_json": ... }`; `{ "value": ... }` is also accepted.
+  - Upserts `system_config` and writes `audit_logs.action = 'admin_config'`.
+- `GET /api/admin/export/:type.csv`
+  - Admin bearer token required.
+  - `type` is one of `students`, `bookings`, `audit`, or `checkin`.
+- `GET /api/public/config`
+  - Public.
+  - Returns public `system_config` values for landing/status pages, such as `play_name`, `venue`, time-window keys, `cast_list`, and `gallery_urls`.
+- `GET /api/public/window-state`
+  - Public.
+  - Returns `{ "state": "before_open"|"open"|"locked"|"show_started" }`.
+
+Authentication:
+
+- Student endpoints use `Authorization: Bearer <token>`.
+- Student tokens are HMAC-SHA256 JWTs signed with `JWT_SECRET`.
+- Checker endpoints use staff JWT bearer tokens signed with `JWT_SECRET`; `admin` tokens can call checker endpoints.
+- Admin endpoints use staff JWT bearer tokens signed with `JWT_SECRET` and require role `admin`.
+- Ticket QR tokens are HMAC-SHA256 signed with `HMAC_SECRET`; check-in verification compares signatures in constant time and rejects stale `ticket_version` values.

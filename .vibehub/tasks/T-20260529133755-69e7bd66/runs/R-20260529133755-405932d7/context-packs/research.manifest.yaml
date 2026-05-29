@@ -1,0 +1,42 @@
+id: research-context-R-20260529133755-405932d7-v1
+schema_version: 1
+phase: research
+task_id: T-20260529133755-69e7bd66
+run_id: R-20260529133755-405932d7
+generated_at: 2026-05-29T13:42:31Z
+source_commit: null
+budget:
+  max_file_size_bytes: 262144
+  max_tokens: 12000
+  estimated_tokens: 238
+included:
+- path: .vibehub/tasks/T-20260529133755-69e7bd66/task.yaml
+  reason: active task metadata and goal
+  required: true
+  confidence: high
+  bytes: 217
+  estimated_tokens: 55
+- path: .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/run.yaml
+  reason: active run metadata
+  required: true
+  confidence: high
+  bytes: 247
+  estimated_tokens: 62
+- path: .vibehub/rules/hard-rules.md
+  reason: protocol hard rules
+  required: true
+  confidence: high
+  bytes: 482
+  estimated_tokens: 121
+missing: []
+excluded: []
+quality:
+  has_goal: true
+  has_plan: false
+  has_relevant_code: false
+  has_test_hint: false
+  stale_sources: []
+  flags: []
+observation:
+  generated_by: vibehub_backend
+  evidence_grade: hard_observed

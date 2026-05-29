@@ -1,0 +1,10 @@
+schema_version: 1
+kind: vibehub_run
+task_id: T-20260529133755-69e7bd66
+run_id: R-20260529133755-405932d7
+mode: evidence_drive
+phase: align
+phase_status: completed
+created_at: 2026-05-29T13:37:55Z
+created_by: vibehub
+baseline_commit: null

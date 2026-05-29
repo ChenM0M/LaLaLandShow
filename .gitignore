@@ -1,0 +1,22 @@
+.DS_Store
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+deploy/.env
+
+# Frontend build/dependency output
+node_modules/
+.next/
+dist/
+build/
+
+# Go build/test output
+*.test
+coverage.out
+
+# Local backup artifacts
+*.sql
+*.sql.gz
+!backend/migrations/*.sql

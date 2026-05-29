@@ -1,0 +1,6 @@
+schema_version: 5
+kind: vibehub_project
+name: "LaLaLandShow"
+root: "."
+protocol_version: "2.0-r10"
+initialized_by: vibehub

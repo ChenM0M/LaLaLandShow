@@ -1,0 +1,63 @@
+# VibeHub Current
+
+## Task
+
+- Task ID: T-20260529133755-69e7bd66
+- Task path: .vibehub/tasks/T-20260529133755-69e7bd66
+- Run ID: R-20260529133755-405932d7
+- Run path: .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7
+
+## Mode
+
+- Mode: evidence_drive
+
+## Current Phase
+
+- Phase: align
+- Status: completed
+
+## Active Tasks
+
+- T-20260529133755-69e7bd66 (current)
+
+## Intake Queue
+
+- None observed.
+
+## Active Capabilities
+
+- implement
+- plan
+- research
+
+## Neighbor Tasks
+
+- None observed.
+
+## Observability Note
+
+- P0/P1 observability is best-effort.
+- Hard observed: Git diff, filesystem state, and VibeHub-generated files.
+- Agent reported: files read, commands run, summaries, and handoff notes.
+- Inferred: task mapping, likely risk, and context completeness.
+- Runtime observation is not enabled in P0.
+
+## What To Read
+
+- **Next session: read `.vibehub/agent-view/handoff.md` first.** It captures the prior session handoff (completed, remaining, commands run, tests run, context used, and warnings).
+- .vibehub/agent-view/current-context.md
+- .vibehub/agent-view/handoff.md
+- .vibehub/rules/hard-rules.md
+- .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.md
+
+## What To Write
+
+- Suggested phase output under .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/ if needed.
+- Changed files only within the active task scope.
+- Final response or agent output must include changed files, commands run, tests run or reason not run, unresolved risks, and handoff notes.
+
+## Stop Condition
+
+- Do not edit .vibehub/state.yaml directly.
+- Do not mark canonical task, run, or phase state completed.
+- Stop and return to VibeHub validation when the phase output is ready or when required context is missing.
