@@ -602,6 +602,143 @@ func (s *PostgresStore) ExportCSV(ctx context.Context, exportType string) (CSVEx
 	}
 }
 
+func (s *PostgresStore) ExportBackup(ctx context.Context, now time.Time) (BackupSnapshot, error) {
+	snapshot := BackupSnapshot{
+		FormatVersion: 1,
+		GeneratedAt:   now.UTC(),
+	}
+
+	configs, err := s.backupConfig(ctx)
+	if err != nil {
+		return BackupSnapshot{}, err
+	}
+	snapshot.SystemConfig = configs
+
+	seats, err := s.backupSeats(ctx)
+	if err != nil {
+		return BackupSnapshot{}, err
+	}
+	snapshot.Seats = seats
+
+	students, err := s.backupStudents(ctx)
+	if err != nil {
+		return BackupSnapshot{}, err
+	}
+	snapshot.Students = students
+
+	bookings, err := s.backupSeatBookings(ctx)
+	if err != nil {
+		return BackupSnapshot{}, err
+	}
+	snapshot.SeatBookings = bookings
+
+	checkins, err := s.backupCheckinEvents(ctx)
+	if err != nil {
+		return BackupSnapshot{}, err
+	}
+	snapshot.CheckinEvents = checkins
+
+	audit, err := s.backupAuditLogs(ctx)
+	if err != nil {
+		return BackupSnapshot{}, err
+	}
+	snapshot.AuditLogs = audit
+	snapshot.Summary = backupSummary(snapshot)
+	return snapshot, nil
+}
+
+func (s *PostgresStore) RestoreBackup(ctx context.Context, input RestoreBackupInput) (RestoreResult, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return RestoreResult{}, fmt.Errorf("begin restore transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	for _, stmt := range []string{
+		`DELETE FROM seat_bookings`,
+		`DELETE FROM checkin_events`,
+		`DELETE FROM audit_logs`,
+		`DELETE FROM students`,
+		`DELETE FROM seats`,
+		`DELETE FROM system_config`,
+	} {
+		if _, err := tx.Exec(ctx, stmt); err != nil {
+			return RestoreResult{}, fmt.Errorf("clear restore target: %w", err)
+		}
+	}
+
+	for _, entry := range input.Snapshot.SystemConfig {
+		if _, err := tx.Exec(ctx, `
+INSERT INTO system_config (key, value_json, updated_by, updated_at)
+VALUES ($1, $2::jsonb, $3, $4)`, entry.Key, string(entry.ValueJSON), entry.UpdatedBy, entry.UpdatedAt); err != nil {
+			return RestoreResult{}, fmt.Errorf("restore system_config: %w", err)
+		}
+	}
+	for _, seat := range input.Snapshot.Seats {
+		if _, err := tx.Exec(ctx, `
+INSERT INTO seats (seat_id, zone, row_no, col_no, is_blocked, block_reason, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, seat.SeatID, seat.Zone, seat.RowNo, seat.ColNo, seat.IsBlocked, seat.BlockReason, seat.CreatedAt, seat.UpdatedAt); err != nil {
+			return RestoreResult{}, fmt.Errorf("restore seats: %w", err)
+		}
+	}
+	for _, studentRow := range input.Snapshot.Students {
+		if _, err := tx.Exec(ctx, `
+INSERT INTO students (student_id, class_code, seat_no_in_class, display_name, pending_notice, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`, studentRow.StudentID, studentRow.ClassCode, studentRow.SeatNoInClass, studentRow.DisplayName, nullableJSON(studentRow.PendingNotice), studentRow.CreatedAt, studentRow.UpdatedAt); err != nil {
+			return RestoreResult{}, fmt.Errorf("restore students: %w", err)
+		}
+	}
+	for _, booking := range input.Snapshot.SeatBookings {
+		if _, err := tx.Exec(ctx, `
+INSERT INTO seat_bookings (seat_id, student_id, custom_label, booked_by_student_id, booked_at, ticket_version)
+VALUES ($1, $2, $3, $4, $5, $6)`, booking.SeatID, booking.StudentID, booking.CustomLabel, booking.BookedByStudentID, booking.BookedAt, booking.TicketVersion); err != nil {
+			return RestoreResult{}, fmt.Errorf("restore seat_bookings: %w", err)
+		}
+	}
+	for _, event := range input.Snapshot.CheckinEvents {
+		if _, err := tx.Exec(ctx, `
+INSERT INTO checkin_events (id, student_id, seat_id, ticket_version, method, result, is_first_scan, scanner_account, ip_addr, scanned_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::inet, $10)`, event.ID, event.StudentID, event.SeatID, event.TicketVersion, event.Method, event.Result, event.IsFirstScan, event.ScannerAccount, event.IPAddr, event.ScannedAt); err != nil {
+			return RestoreResult{}, fmt.Errorf("restore checkin_events: %w", err)
+		}
+	}
+	for _, audit := range input.Snapshot.AuditLogs {
+		if _, err := tx.Exec(ctx, `
+INSERT INTO audit_logs (id, actor_type, actor_id, action, target_seat_id, target_student, before_json, after_json, ip_addr, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::inet, $10)`, audit.ID, audit.ActorType, audit.ActorID, audit.Action, audit.TargetSeatID, audit.TargetStudent, nullableJSON(audit.Before), nullableJSON(audit.After), audit.IPAddr, audit.CreatedAt); err != nil {
+			return RestoreResult{}, fmt.Errorf("restore audit_logs: %w", err)
+		}
+	}
+
+	for _, stmt := range []string{
+		`SELECT setval(pg_get_serial_sequence('seats', 'seat_id'), COALESCE((SELECT max(seat_id) FROM seats), 1), true)`,
+		`SELECT setval(pg_get_serial_sequence('checkin_events', 'id'), COALESCE((SELECT max(id) FROM checkin_events), 1), true)`,
+		`SELECT setval(pg_get_serial_sequence('audit_logs', 'id'), COALESCE((SELECT max(id) FROM audit_logs), 1), true)`,
+	} {
+		if _, err := tx.Exec(ctx, stmt); err != nil {
+			return RestoreResult{}, fmt.Errorf("reset restore sequences: %w", err)
+		}
+	}
+
+	after, _ := json.Marshal(map[string]any{
+		"restored_by": input.Actor,
+		"restored_at": input.Now.UTC().Format(time.RFC3339),
+		"summary":     backupSummary(input.Snapshot),
+	})
+	if err := writeAudit(ctx, tx, "admin_restore", input.Actor, 0, nil, nil, after); err != nil {
+		return RestoreResult{}, err
+	}
+	if _, err := tx.Exec(ctx, `SELECT setval(pg_get_serial_sequence('audit_logs', 'id'), COALESCE((SELECT max(id) FROM audit_logs), 1), true)`); err != nil {
+		return RestoreResult{}, fmt.Errorf("reset audit sequence after restore audit: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return RestoreResult{}, fmt.Errorf("commit restore transaction: %w", err)
+	}
+	return RestoreResult{RestoredAt: input.Now.UTC(), Summary: backupSummary(input.Snapshot)}, nil
+}
+
 const seatDetailSQL = `
 SELECT se.seat_id,
        se.zone,
@@ -1006,6 +1143,165 @@ ORDER BY scanned_at DESC, id DESC`)
 	return export, rows.Err()
 }
 
+func (s *PostgresStore) backupConfig(ctx context.Context) ([]BackupConfig, error) {
+	rows, err := s.db.Query(ctx, `
+SELECT key, value_json, updated_by, updated_at
+FROM system_config
+ORDER BY key`)
+	if err != nil {
+		return nil, fmt.Errorf("backup system_config: %w", err)
+	}
+	defer rows.Close()
+
+	out := []BackupConfig{}
+	for rows.Next() {
+		var entry BackupConfig
+		var raw []byte
+		var updatedBy sql.NullString
+		if err := rows.Scan(&entry.Key, &raw, &updatedBy, &entry.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan backup system_config: %w", err)
+		}
+		entry.ValueJSON = rawJSON(raw)
+		entry.UpdatedBy = stringPtr(updatedBy)
+		out = append(out, entry)
+	}
+	return out, rows.Err()
+}
+
+func (s *PostgresStore) backupSeats(ctx context.Context) ([]BackupSeat, error) {
+	rows, err := s.db.Query(ctx, `
+SELECT seat_id, zone, row_no, col_no, is_blocked, block_reason, created_at, updated_at
+FROM seats
+ORDER BY seat_id`)
+	if err != nil {
+		return nil, fmt.Errorf("backup seats: %w", err)
+	}
+	defer rows.Close()
+
+	out := []BackupSeat{}
+	for rows.Next() {
+		var seat BackupSeat
+		var blockReason sql.NullString
+		if err := rows.Scan(&seat.SeatID, &seat.Zone, &seat.RowNo, &seat.ColNo, &seat.IsBlocked, &blockReason, &seat.CreatedAt, &seat.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan backup seat: %w", err)
+		}
+		seat.BlockReason = stringPtr(blockReason)
+		out = append(out, seat)
+	}
+	return out, rows.Err()
+}
+
+func (s *PostgresStore) backupStudents(ctx context.Context) ([]BackupStudent, error) {
+	rows, err := s.db.Query(ctx, `
+SELECT student_id, class_code, seat_no_in_class, display_name, pending_notice, created_at, updated_at
+FROM students
+ORDER BY student_id`)
+	if err != nil {
+		return nil, fmt.Errorf("backup students: %w", err)
+	}
+	defer rows.Close()
+
+	out := []BackupStudent{}
+	for rows.Next() {
+		var row BackupStudent
+		var classCode, displayName sql.NullString
+		var seatNo sql.NullInt64
+		var notice []byte
+		if err := rows.Scan(&row.StudentID, &classCode, &seatNo, &displayName, &notice, &row.CreatedAt, &row.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan backup student: %w", err)
+		}
+		row.ClassCode = stringPtr(classCode)
+		row.SeatNoInClass = intPtr(seatNo)
+		row.DisplayName = stringPtr(displayName)
+		row.PendingNotice = rawJSON(notice)
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+func (s *PostgresStore) backupSeatBookings(ctx context.Context) ([]BackupSeatBooking, error) {
+	rows, err := s.db.Query(ctx, `
+SELECT seat_id, student_id, custom_label, booked_by_student_id, booked_at, ticket_version
+FROM seat_bookings
+ORDER BY seat_id`)
+	if err != nil {
+		return nil, fmt.Errorf("backup seat_bookings: %w", err)
+	}
+	defer rows.Close()
+
+	out := []BackupSeatBooking{}
+	for rows.Next() {
+		var row BackupSeatBooking
+		var studentID, customLabel, bookedBy sql.NullString
+		if err := rows.Scan(&row.SeatID, &studentID, &customLabel, &bookedBy, &row.BookedAt, &row.TicketVersion); err != nil {
+			return nil, fmt.Errorf("scan backup seat_booking: %w", err)
+		}
+		row.StudentID = stringPtr(studentID)
+		row.CustomLabel = stringPtr(customLabel)
+		row.BookedByStudentID = stringPtr(bookedBy)
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+func (s *PostgresStore) backupCheckinEvents(ctx context.Context) ([]BackupCheckinEvent, error) {
+	rows, err := s.db.Query(ctx, `
+SELECT id, student_id, seat_id, ticket_version, method, result, is_first_scan, scanner_account, ip_addr::text, scanned_at
+FROM checkin_events
+ORDER BY id`)
+	if err != nil {
+		return nil, fmt.Errorf("backup checkin_events: %w", err)
+	}
+	defer rows.Close()
+
+	out := []BackupCheckinEvent{}
+	for rows.Next() {
+		var row BackupCheckinEvent
+		var studentID, scanner, ip sql.NullString
+		var seatID, version sql.NullInt64
+		if err := rows.Scan(&row.ID, &studentID, &seatID, &version, &row.Method, &row.Result, &row.IsFirstScan, &scanner, &ip, &row.ScannedAt); err != nil {
+			return nil, fmt.Errorf("scan backup checkin_event: %w", err)
+		}
+		row.StudentID = stringPtr(studentID)
+		row.SeatID = int64Ptr(seatID)
+		row.TicketVersion = intPtr(version)
+		row.ScannerAccount = stringPtr(scanner)
+		row.IPAddr = stringPtr(ip)
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+func (s *PostgresStore) backupAuditLogs(ctx context.Context) ([]BackupAuditLog, error) {
+	rows, err := s.db.Query(ctx, `
+SELECT id, actor_type, actor_id, action, target_seat_id, target_student, before_json, after_json, ip_addr::text, created_at
+FROM audit_logs
+ORDER BY id`)
+	if err != nil {
+		return nil, fmt.Errorf("backup audit_logs: %w", err)
+	}
+	defer rows.Close()
+
+	out := []BackupAuditLog{}
+	for rows.Next() {
+		var row BackupAuditLog
+		var actorID, targetStudent, ip sql.NullString
+		var targetSeatID sql.NullInt64
+		var beforeJSON, afterJSON []byte
+		if err := rows.Scan(&row.ID, &row.ActorType, &actorID, &row.Action, &targetSeatID, &targetStudent, &beforeJSON, &afterJSON, &ip, &row.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan backup audit_log: %w", err)
+		}
+		row.ActorID = stringPtr(actorID)
+		row.TargetSeatID = int64Ptr(targetSeatID)
+		row.TargetStudent = stringPtr(targetStudent)
+		row.Before = rawJSON(beforeJSON)
+		row.After = rawJSON(afterJSON)
+		row.IPAddr = stringPtr(ip)
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 func stringPtr(value sql.NullString) *string {
 	if !value.Valid {
 		return nil
@@ -1019,6 +1315,14 @@ func intPtr(value sql.NullInt64) *int {
 		return nil
 	}
 	out := int(value.Int64)
+	return &out
+}
+
+func int64Ptr(value sql.NullInt64) *int64 {
+	if !value.Valid {
+		return nil
+	}
+	out := value.Int64
 	return &out
 }
 

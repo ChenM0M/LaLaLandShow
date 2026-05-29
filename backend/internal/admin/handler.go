@@ -37,6 +37,9 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	group.Get("/config/:key", h.getConfig)
 	group.Put("/config/:key", h.setConfig)
 	group.Get("/export/:type.csv", h.exportCSV)
+	group.Get("/backup/export", h.exportBackup)
+	group.Post("/backup/plan", h.planRestore)
+	group.Post("/backup/restore", h.restoreBackup)
 }
 
 type loginRequest struct {
@@ -59,6 +62,15 @@ type lockSeatRequest struct {
 type configRequest struct {
 	ValueJSON json.RawMessage `json:"value_json"`
 	Value     json.RawMessage `json:"value"`
+}
+
+type restorePlanRequest struct {
+	Snapshot BackupSnapshot `json:"snapshot"`
+}
+
+type restoreRequest struct {
+	Snapshot          BackupSnapshot `json:"snapshot"`
+	ConfirmationToken string         `json:"confirmation_token"`
 }
 
 func (h *Handler) login(c fiber.Ctx) error {
@@ -235,6 +247,44 @@ func (h *Handler) exportCSV(c fiber.Ctx) error {
 	return writer.Error()
 }
 
+func (h *Handler) exportBackup(c fiber.Ctx) error {
+	snapshot, err := h.service.ExportBackup(c.Context())
+	if err != nil {
+		return writeServiceError(c, err)
+	}
+	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	c.Set("Content-Disposition", `attachment; filename="lalaland-backup.json"`)
+	return c.JSON(snapshot)
+}
+
+func (h *Handler) planRestore(c fiber.Ctx) error {
+	var req restorePlanRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid JSON body"})
+	}
+	plan, err := h.service.PlanRestore(req.Snapshot)
+	if err != nil {
+		return writeServiceError(c, err)
+	}
+	return c.JSON(plan)
+}
+
+func (h *Handler) restoreBackup(c fiber.Ctx) error {
+	staff, ok := auth.Staff(c)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing authenticated staff"})
+	}
+	var req restoreRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid JSON body"})
+	}
+	result, err := h.service.RestoreBackup(c.Context(), req.Snapshot, req.ConfirmationToken, staff.Username)
+	if err != nil {
+		return writeServiceError(c, err)
+	}
+	return c.JSON(result)
+}
+
 func (h *Handler) publicConfig(c fiber.Ctx) error {
 	config, err := h.service.PublicConfig(c.Context())
 	if err != nil {
@@ -282,6 +332,8 @@ func writeServiceError(c fiber.Ctx, err error) error {
 		errors.Is(err, ErrInvalidConfigKey),
 		errors.Is(err, ErrInvalidJSON),
 		errors.Is(err, ErrInvalidExportType),
+		errors.Is(err, ErrInvalidBackup),
+		errors.Is(err, ErrInvalidRestoreToken),
 		errors.Is(err, student.ErrInvalidStudentID):
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	case errors.Is(err, ErrSeatNotFound), errors.Is(err, ErrConfigNotFound):

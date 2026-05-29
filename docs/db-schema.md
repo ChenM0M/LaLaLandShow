@@ -31,3 +31,4 @@ Core correctness constraints:
 - Admin permanent locking updates `seats.is_blocked` and `seats.block_reason`; seat snapshots continue to surface blocked seats as `locked`.
 - Admin config writes upsert `system_config.value_json` and write `audit_logs.action = 'admin_config'`.
 - Admin list/export endpoints read from `students`, `seat_bookings`, `audit_logs`, and `checkin_events`; they do not mutate state.
+- Admin JSON restores replace `system_config`, `seats`, `students`, `seat_bookings`, `checkin_events`, and `audit_logs`, reset restored sequences, and then append `audit_logs.action = 'admin_restore'`.

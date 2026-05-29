@@ -121,7 +121,7 @@ func main() {
 		checker.NewHandler(checkerService, authManager).RegisterRoutes(app)
 
 		adminStore := admin.NewPostgresStore(db)
-		adminService := admin.NewService(adminStore, authManager)
+		adminService := admin.NewService(adminStore, authManager, cfg.HMACSecret)
 		admin.NewHandler(adminService, authManager).RegisterRoutes(app)
 	}
 

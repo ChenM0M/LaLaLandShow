@@ -35,3 +35,11 @@ Admin B9 notes:
 - Dashboard data is available from `GET /api/admin/dashboard`.
 - Counts are computed from PostgreSQL at request time so the dashboard reflects the same source of truth used by booking and check-in flows.
 - `last_minute_rate` uses approved check-in events in the trailing minute, matching the checker stats definition.
+
+Admin B10 notes:
+
+- `GET /api/admin/backup/export` creates an application-level JSON backup. It is portable across the current app schema and does not require `pg_dump` inside the backend container.
+- `POST /api/admin/backup/plan` validates a backup snapshot and returns a `confirmation_token`.
+- `POST /api/admin/backup/restore` requires the exact snapshot plus its confirmation token. Restore replaces business data in one PostgreSQL transaction and records `audit_logs.action = 'admin_restore'`.
+- Staff credentials are excluded from JSON backups; keep `ADMIN_USERS`, `ADMIN_PASSWORDS`, `CHECKER_USER`, and `CHECKER_PASSWORD` in deployment secrets.
+- Keep the shell `deploy/backup.sh` SQL dump for infrastructure-level disaster recovery; use JSON backup/restore for admin-operated app data moves.

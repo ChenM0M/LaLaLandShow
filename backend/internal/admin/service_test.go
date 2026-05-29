@@ -14,14 +14,16 @@ import (
 )
 
 type fakeStore struct {
-	account     StaffAccount
-	accountErr  error
-	assignInput AssignSeatInput
-	assignErr   error
-	configInput ConfigInput
-	exportType  string
-	windowState WindowState
-	dashboardAt time.Time
+	account      StaffAccount
+	accountErr   error
+	assignInput  AssignSeatInput
+	assignErr    error
+	configInput  ConfigInput
+	exportType   string
+	windowState  WindowState
+	dashboardAt  time.Time
+	backupAt     time.Time
+	restoreInput RestoreBackupInput
 }
 
 func (s *fakeStore) FindStaffAccount(_ context.Context, _ string) (StaffAccount, error) {
@@ -87,6 +89,16 @@ func (s *fakeStore) WindowState(context.Context, time.Time) (WindowState, error)
 func (s *fakeStore) ExportCSV(_ context.Context, exportType string) (CSVExport, error) {
 	s.exportType = exportType
 	return CSVExport{Filename: "test.csv", Header: []string{"id"}}, nil
+}
+
+func (s *fakeStore) ExportBackup(_ context.Context, now time.Time) (BackupSnapshot, error) {
+	s.backupAt = now
+	return minimalBackupSnapshot(now), nil
+}
+
+func (s *fakeStore) RestoreBackup(_ context.Context, input RestoreBackupInput) (RestoreResult, error) {
+	s.restoreInput = input
+	return RestoreResult{RestoredAt: input.Now.UTC(), Summary: backupSummary(input.Snapshot)}, nil
 }
 
 func TestServiceLoginRequiresAdminRole(t *testing.T) {
@@ -181,4 +193,74 @@ func TestServiceDashboardStatsUsesServiceClock(t *testing.T) {
 	if stats.GeneratedAt.Location() != time.UTC {
 		t.Fatalf("GeneratedAt location = %v, want UTC", stats.GeneratedAt.Location())
 	}
+}
+
+func TestServicePlanRestoreRejectsInvalidSnapshot(t *testing.T) {
+	service := NewService(&fakeStore{}, auth.NewManager("jwt-secret", time.Hour), "restore-secret")
+
+	if _, err := service.PlanRestore(BackupSnapshot{FormatVersion: 99}); !errors.Is(err, ErrInvalidBackup) {
+		t.Fatalf("PlanRestore(invalid) error = %v, want %v", err, ErrInvalidBackup)
+	}
+}
+
+func TestServiceRestoreBackupRequiresConfirmationToken(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(store, auth.NewManager("jwt-secret", time.Hour), "restore-secret")
+	now := time.Date(2026, 5, 29, 12, 30, 0, 0, time.UTC)
+	service.now = func() time.Time { return now }
+	snapshot := minimalBackupSnapshot(now)
+
+	if _, err := service.RestoreBackup(context.Background(), snapshot, "wrong", "admin"); !errors.Is(err, ErrInvalidRestoreToken) {
+		t.Fatalf("RestoreBackup(wrong token) error = %v, want %v", err, ErrInvalidRestoreToken)
+	}
+
+	plan, err := service.PlanRestore(snapshot)
+	if err != nil {
+		t.Fatalf("PlanRestore() error = %v", err)
+	}
+	result, err := service.RestoreBackup(context.Background(), snapshot, plan.ConfirmationToken, "admin")
+	if err != nil {
+		t.Fatalf("RestoreBackup() error = %v", err)
+	}
+	if result.SnapshotHash != plan.SnapshotHash {
+		t.Fatalf("SnapshotHash = %q, want %q", result.SnapshotHash, plan.SnapshotHash)
+	}
+	if store.restoreInput.Actor != "admin" {
+		t.Fatalf("restore actor = %q, want admin", store.restoreInput.Actor)
+	}
+}
+
+func minimalBackupSnapshot(now time.Time) BackupSnapshot {
+	return BackupSnapshot{
+		FormatVersion: 1,
+		GeneratedAt:   now.UTC(),
+		SystemConfig: []BackupConfig{{
+			Key:       "play_name",
+			ValueJSON: json.RawMessage(`"La La Land"`),
+			UpdatedAt: now.UTC(),
+		}},
+		Seats: []BackupSeat{{
+			SeatID:    1,
+			Zone:      "middle",
+			RowNo:     1,
+			ColNo:     1,
+			CreatedAt: now.UTC(),
+			UpdatedAt: now.UTC(),
+		}},
+		Students: []BackupStudent{{
+			StudentID: "1234567",
+			CreatedAt: now.UTC(),
+			UpdatedAt: now.UTC(),
+		}},
+		SeatBookings: []BackupSeatBooking{{
+			SeatID:        1,
+			StudentID:     stringLiteral("1234567"),
+			BookedAt:      now.UTC(),
+			TicketVersion: 1,
+		}},
+	}
+}
+
+func stringLiteral(value string) *string {
+	return &value
 }

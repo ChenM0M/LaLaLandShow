@@ -1,6 +1,6 @@
 # API Notes
 
-This file tracks the backend API contract as B0-B9 are implemented.
+This file tracks the backend API contract as B0-B11 are implemented.
 
 Initial health endpoint:
 
@@ -138,6 +138,20 @@ Student identity endpoints:
 - `GET /api/admin/export/:type.csv`
   - Admin bearer token required.
   - `type` is one of `students`, `bookings`, `audit`, or `checkin`.
+- `GET /api/admin/backup/export`
+  - Admin bearer token required.
+  - Downloads an application-level JSON backup snapshot.
+  - The snapshot includes `system_config`, `seats`, `students`, `seat_bookings`, `checkin_events`, and `audit_logs`.
+  - `staff_accounts` are intentionally excluded; staff credentials continue to be seeded from environment variables.
+- `POST /api/admin/backup/plan`
+  - Admin bearer token required.
+  - Request: `{ "snapshot": { ...backup snapshot... } }`.
+  - Validates the snapshot and returns `{ "snapshot_hash", "confirmation_token", "summary", "warnings" }`.
+- `POST /api/admin/backup/restore`
+  - Admin bearer token required.
+  - Request: `{ "snapshot": { ...backup snapshot... }, "confirmation_token": "..." }`.
+  - The token must come from `/api/admin/backup/plan` for the exact same snapshot.
+  - Restores the snapshot in one PostgreSQL transaction, resets affected sequences, and writes `audit_logs.action = 'admin_restore'`.
 - `GET /api/public/config`
   - Public.
   - Returns public `system_config` values for landing/status pages, such as `play_name`, `venue`, time-window keys, `cast_list`, and `gallery_urls`.

@@ -2,6 +2,10 @@ package admin
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,16 +24,18 @@ const (
 )
 
 var (
-	ErrInvalidCredentials = errors.New("invalid username or password")
-	ErrForbidden          = errors.New("admin role required")
-	ErrInvalidSeatID      = errors.New("seat_id must be positive")
-	ErrInvalidAssignment  = errors.New("assignment must contain either student_id, custom_label, or release=true")
-	ErrAssignmentConflict = errors.New("seat or student already has an assignment")
-	ErrSeatNotFound       = errors.New("seat not found")
-	ErrConfigNotFound     = errors.New("config key not found")
-	ErrInvalidConfigKey   = errors.New("invalid config key")
-	ErrInvalidJSON        = errors.New("value_json must be valid JSON")
-	ErrInvalidExportType  = errors.New("invalid export type")
+	ErrInvalidCredentials  = errors.New("invalid username or password")
+	ErrForbidden           = errors.New("admin role required")
+	ErrInvalidSeatID       = errors.New("seat_id must be positive")
+	ErrInvalidAssignment   = errors.New("assignment must contain either student_id, custom_label, or release=true")
+	ErrAssignmentConflict  = errors.New("seat or student already has an assignment")
+	ErrSeatNotFound        = errors.New("seat not found")
+	ErrConfigNotFound      = errors.New("config key not found")
+	ErrInvalidConfigKey    = errors.New("invalid config key")
+	ErrInvalidJSON         = errors.New("value_json must be valid JSON")
+	ErrInvalidExportType   = errors.New("invalid export type")
+	ErrInvalidBackup       = errors.New("invalid backup snapshot")
+	ErrInvalidRestoreToken = errors.New("invalid restore confirmation token")
 )
 
 var configKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{1,63}$`)
@@ -48,6 +54,8 @@ type Store interface {
 	PublicConfig(ctx context.Context) (map[string]json.RawMessage, error)
 	WindowState(ctx context.Context, now time.Time) (WindowState, error)
 	ExportCSV(ctx context.Context, exportType string) (CSVExport, error)
+	ExportBackup(ctx context.Context, now time.Time) (BackupSnapshot, error)
+	RestoreBackup(ctx context.Context, input RestoreBackupInput) (RestoreResult, error)
 }
 
 type TokenIssuer interface {
@@ -55,9 +63,10 @@ type TokenIssuer interface {
 }
 
 type Service struct {
-	store  Store
-	tokens TokenIssuer
-	now    func() time.Time
+	store         Store
+	tokens        TokenIssuer
+	restoreSecret string
+	now           func() time.Time
 }
 
 type StaffAccount struct {
@@ -257,11 +266,119 @@ type CSVExport struct {
 	Rows     [][]string
 }
 
-func NewService(store Store, tokens TokenIssuer) *Service {
+type BackupSnapshot struct {
+	FormatVersion int                  `json:"format_version"`
+	GeneratedAt   time.Time            `json:"generated_at"`
+	SystemConfig  []BackupConfig       `json:"system_config"`
+	Seats         []BackupSeat         `json:"seats"`
+	Students      []BackupStudent      `json:"students"`
+	SeatBookings  []BackupSeatBooking  `json:"seat_bookings"`
+	CheckinEvents []BackupCheckinEvent `json:"checkin_events"`
+	AuditLogs     []BackupAuditLog     `json:"audit_logs"`
+	Summary       BackupSummary        `json:"summary"`
+}
+
+type BackupConfig struct {
+	Key       string          `json:"key"`
+	ValueJSON json.RawMessage `json:"value_json"`
+	UpdatedBy *string         `json:"updated_by"`
+	UpdatedAt time.Time       `json:"updated_at"`
+}
+
+type BackupSeat struct {
+	SeatID      int64     `json:"seat_id"`
+	Zone        string    `json:"zone"`
+	RowNo       int       `json:"row_no"`
+	ColNo       int       `json:"col_no"`
+	IsBlocked   bool      `json:"is_blocked"`
+	BlockReason *string   `json:"block_reason"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type BackupStudent struct {
+	StudentID     string          `json:"student_id"`
+	ClassCode     *string         `json:"class_code"`
+	SeatNoInClass *int            `json:"seat_no_in_class"`
+	DisplayName   *string         `json:"display_name"`
+	PendingNotice json.RawMessage `json:"pending_notice,omitempty"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+}
+
+type BackupSeatBooking struct {
+	SeatID            int64     `json:"seat_id"`
+	StudentID         *string   `json:"student_id"`
+	CustomLabel       *string   `json:"custom_label"`
+	BookedByStudentID *string   `json:"booked_by_student_id"`
+	BookedAt          time.Time `json:"booked_at"`
+	TicketVersion     int       `json:"ticket_version"`
+}
+
+type BackupCheckinEvent struct {
+	ID             int64     `json:"id"`
+	StudentID      *string   `json:"student_id"`
+	SeatID         *int64    `json:"seat_id"`
+	TicketVersion  *int      `json:"ticket_version"`
+	Method         string    `json:"method"`
+	Result         string    `json:"result"`
+	IsFirstScan    bool      `json:"is_first_scan"`
+	ScannerAccount *string   `json:"scanner_account"`
+	IPAddr         *string   `json:"ip_addr"`
+	ScannedAt      time.Time `json:"scanned_at"`
+}
+
+type BackupAuditLog struct {
+	ID            int64           `json:"id"`
+	ActorType     string          `json:"actor_type"`
+	ActorID       *string         `json:"actor_id"`
+	Action        string          `json:"action"`
+	TargetSeatID  *int64          `json:"target_seat_id"`
+	TargetStudent *string         `json:"target_student"`
+	Before        json.RawMessage `json:"before_json,omitempty"`
+	After         json.RawMessage `json:"after_json,omitempty"`
+	IPAddr        *string         `json:"ip_addr"`
+	CreatedAt     time.Time       `json:"created_at"`
+}
+
+type BackupSummary struct {
+	SystemConfig  int `json:"system_config"`
+	Seats         int `json:"seats"`
+	Students      int `json:"students"`
+	SeatBookings  int `json:"seat_bookings"`
+	CheckinEvents int `json:"checkin_events"`
+	AuditLogs     int `json:"audit_logs"`
+}
+
+type RestorePlan struct {
+	SnapshotHash      string        `json:"snapshot_hash"`
+	ConfirmationToken string        `json:"confirmation_token"`
+	Summary           BackupSummary `json:"summary"`
+	Warnings          []string      `json:"warnings"`
+}
+
+type RestoreBackupInput struct {
+	Snapshot BackupSnapshot
+	Actor    string
+	Now      time.Time
+}
+
+type RestoreResult struct {
+	SnapshotHash string        `json:"snapshot_hash"`
+	RestoredAt   time.Time     `json:"restored_at"`
+	Summary      BackupSummary `json:"summary"`
+}
+
+func NewService(store Store, tokens TokenIssuer, restoreSecret ...string) *Service {
+	secret := ""
+	if len(restoreSecret) > 0 {
+		secret = restoreSecret[0]
+	}
 	return &Service{
-		store:  store,
-		tokens: tokens,
-		now:    time.Now,
+		store:         store,
+		tokens:        tokens,
+		restoreSecret: secret,
+		now:           time.Now,
 	}
 }
 
@@ -402,6 +519,175 @@ func (s *Service) ExportCSV(ctx context.Context, exportType string) (CSVExport, 
 	default:
 		return CSVExport{}, ErrInvalidExportType
 	}
+}
+
+func (s *Service) ExportBackup(ctx context.Context) (BackupSnapshot, error) {
+	snapshot, err := s.store.ExportBackup(ctx, s.now())
+	if err != nil {
+		return BackupSnapshot{}, err
+	}
+	snapshot.Summary = backupSummary(snapshot)
+	return snapshot, nil
+}
+
+func (s *Service) PlanRestore(snapshot BackupSnapshot) (RestorePlan, error) {
+	if err := validateBackupSnapshot(snapshot); err != nil {
+		return RestorePlan{}, err
+	}
+	hash, err := snapshotHash(snapshot)
+	if err != nil {
+		return RestorePlan{}, err
+	}
+	warnings := []string{
+		"restore replaces system_config, seats, students, seat_bookings, checkin_events, and audit_logs",
+		"staff_accounts are not restored and continue to be seeded from environment variables",
+	}
+	return RestorePlan{
+		SnapshotHash:      hash,
+		ConfirmationToken: s.restoreToken(hash),
+		Summary:           backupSummary(snapshot),
+		Warnings:          warnings,
+	}, nil
+}
+
+func (s *Service) RestoreBackup(ctx context.Context, snapshot BackupSnapshot, token, actor string) (RestoreResult, error) {
+	plan, err := s.PlanRestore(snapshot)
+	if err != nil {
+		return RestoreResult{}, err
+	}
+	if !hmac.Equal([]byte(strings.TrimSpace(token)), []byte(plan.ConfirmationToken)) {
+		return RestoreResult{}, ErrInvalidRestoreToken
+	}
+	now := s.now()
+	result, err := s.store.RestoreBackup(ctx, RestoreBackupInput{
+		Snapshot: snapshot,
+		Actor:    strings.TrimSpace(actor),
+		Now:      now,
+	})
+	if err != nil {
+		return RestoreResult{}, err
+	}
+	result.SnapshotHash = plan.SnapshotHash
+	result.RestoredAt = now.UTC()
+	result.Summary = plan.Summary
+	return result, nil
+}
+
+func (s *Service) restoreToken(hash string) string {
+	mac := hmac.New(sha256.New, []byte(s.restoreSecret))
+	mac.Write([]byte("lalaland:restore:v1:"))
+	mac.Write([]byte(hash))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func snapshotHash(snapshot BackupSnapshot) (string, error) {
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		return "", fmt.Errorf("marshal backup snapshot: %w", err)
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func backupSummary(snapshot BackupSnapshot) BackupSummary {
+	return BackupSummary{
+		SystemConfig:  len(snapshot.SystemConfig),
+		Seats:         len(snapshot.Seats),
+		Students:      len(snapshot.Students),
+		SeatBookings:  len(snapshot.SeatBookings),
+		CheckinEvents: len(snapshot.CheckinEvents),
+		AuditLogs:     len(snapshot.AuditLogs),
+	}
+}
+
+func validateBackupSnapshot(snapshot BackupSnapshot) error {
+	if snapshot.FormatVersion != 1 {
+		return ErrInvalidBackup
+	}
+	if len(snapshot.Seats) == 0 {
+		return ErrInvalidBackup
+	}
+
+	seatIDs := map[int64]struct{}{}
+	for _, seat := range snapshot.Seats {
+		if seat.SeatID <= 0 || seat.RowNo <= 0 || seat.ColNo <= 0 {
+			return ErrInvalidBackup
+		}
+		if seat.Zone != "left" && seat.Zone != "middle" && seat.Zone != "right" {
+			return ErrInvalidBackup
+		}
+		if _, exists := seatIDs[seat.SeatID]; exists {
+			return ErrInvalidBackup
+		}
+		seatIDs[seat.SeatID] = struct{}{}
+	}
+
+	studentIDs := map[string]struct{}{}
+	for _, studentRow := range snapshot.Students {
+		if !student.IsValidStudentID(studentRow.StudentID) {
+			return ErrInvalidBackup
+		}
+		if (studentRow.ClassCode == nil) != (studentRow.SeatNoInClass == nil) {
+			return ErrInvalidBackup
+		}
+		if len(studentRow.PendingNotice) > 0 && !json.Valid(studentRow.PendingNotice) {
+			return ErrInvalidBackup
+		}
+		if _, exists := studentIDs[studentRow.StudentID]; exists {
+			return ErrInvalidBackup
+		}
+		studentIDs[studentRow.StudentID] = struct{}{}
+	}
+
+	bookedSeats := map[int64]struct{}{}
+	bookedStudents := map[string]struct{}{}
+	for _, booking := range snapshot.SeatBookings {
+		if _, exists := seatIDs[booking.SeatID]; !exists {
+			return ErrInvalidBackup
+		}
+		if (booking.StudentID == nil) == (booking.CustomLabel == nil) {
+			return ErrInvalidBackup
+		}
+		if booking.StudentID != nil {
+			if !student.IsValidStudentID(*booking.StudentID) {
+				return ErrInvalidBackup
+			}
+			if _, exists := studentIDs[*booking.StudentID]; !exists {
+				return ErrInvalidBackup
+			}
+			if _, exists := bookedStudents[*booking.StudentID]; exists {
+				return ErrInvalidBackup
+			}
+			bookedStudents[*booking.StudentID] = struct{}{}
+		}
+		if booking.BookedByStudentID != nil {
+			if !student.IsValidStudentID(*booking.BookedByStudentID) {
+				return ErrInvalidBackup
+			}
+			if _, exists := studentIDs[*booking.BookedByStudentID]; !exists {
+				return ErrInvalidBackup
+			}
+		}
+		if booking.TicketVersion <= 0 {
+			return ErrInvalidBackup
+		}
+		if _, exists := bookedSeats[booking.SeatID]; exists {
+			return ErrInvalidBackup
+		}
+		bookedSeats[booking.SeatID] = struct{}{}
+	}
+
+	configKeys := map[string]struct{}{}
+	for _, entry := range snapshot.SystemConfig {
+		if !configKeyPattern.MatchString(entry.Key) || !json.Valid(entry.ValueJSON) {
+			return ErrInvalidBackup
+		}
+		if _, exists := configKeys[entry.Key]; exists {
+			return ErrInvalidBackup
+		}
+		configKeys[entry.Key] = struct{}{}
+	}
+	return nil
 }
 
 func normalizePage(page, pageSize int) (int, int) {

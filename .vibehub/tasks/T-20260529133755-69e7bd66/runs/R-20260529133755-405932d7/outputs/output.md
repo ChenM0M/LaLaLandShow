@@ -769,3 +769,97 @@
 
 - `inferred`: Continue Backend B10 with an explicit safe backup/restore design, or run B12 load testing if deployment performance risk is more urgent.
 - `agent_reported`: Keep using VibeHub output files for reported state and do not manually edit canonical task/run pointers.
+
+---
+
+## Backend B10 Backup Restore - 2026-05-29T16:20Z
+
+### Completed
+
+- `user_confirmed`: User asked "B10呢？继续推进直至结束吧".
+- `hard_observed`: Implemented B10 admin JSON backup export at `GET /api/admin/backup/export`.
+- `hard_observed`: Implemented B10 restore planning at `POST /api/admin/backup/plan`, returning snapshot hash, confirmation token, summary, and warnings.
+- `hard_observed`: Implemented B10 restore execution at `POST /api/admin/backup/restore`, requiring the exact snapshot plus matching confirmation token.
+- `hard_observed`: Restore runs in one PostgreSQL transaction, clears/restores `system_config`, `seats`, `students`, `seat_bookings`, `checkin_events`, and `audit_logs`, resets sequences, and appends `audit_logs.action = 'admin_restore'`.
+- `hard_observed`: Staff credentials are intentionally excluded from JSON backup snapshots and remain environment-seeded.
+- `hard_observed`: Updated API, DB schema, and operations docs for B10 behavior.
+
+### Not Yet Done
+
+- `agent_reported`: B12 load testing is still not implemented.
+- `agent_reported`: Infrastructure-level SQL dump remains covered by `deploy/backup.sh`; B10 adds app-level JSON backup/restore APIs rather than replacing SQL disaster recovery.
+- `hard_observed`: VibeHub canonical current phase still reports `align` with status `completed`; agent work continues by user instruction and output reporting only.
+
+### Key Decisions Made
+
+- `agent_reported`: Used app-level JSON snapshots because the runtime backend image is distroless and does not include `pg_dump`/`psql`.
+- `agent_reported`: Added a two-step restore flow so admins must validate a snapshot and provide a generated confirmation token before destructive replacement.
+- `agent_reported`: Excluded `staff_accounts` from backups to avoid exporting password hashes; operational secrets remain the source for admin/checker accounts.
+- `agent_reported`: Live smoke restored the same exported snapshot to validate the restore transaction while preserving current local business data, aside from the expected appended `admin_restore` audit row.
+
+### Files Changed
+
+- `hard_observed`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/output.md`
+- `hard_observed`: `backend/cmd/server/main.go`
+- `hard_observed`: `backend/internal/admin/handler.go`
+- `hard_observed`: `backend/internal/admin/postgres.go`
+- `hard_observed`: `backend/internal/admin/service.go`
+- `hard_observed`: `backend/internal/admin/service_test.go`
+- `hard_observed`: `docs/api.md`
+- `hard_observed`: `docs/db-schema.md`
+- `hard_observed`: `docs/operations.md`
+
+### Files Reportedly Read
+
+- `agent_reported`: `.vibehub/agent-view/current.md`
+- `agent_reported`: `.vibehub/agent-view/current-context.md`
+- `agent_reported`: `.vibehub/agent-view/handoff.md`
+- `agent_reported`: `.vibehub/rules/hard-rules.md`
+- `agent_reported`: `.vibehub/adapters/protocol.md`
+- `agent_reported`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.md`
+- `agent_reported`: `.vibehub/research/current/research-pack.md`
+- `agent_reported`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/output.md`
+- `agent_reported`: `docs/api.md`
+- `agent_reported`: `docs/operations.md`
+- `agent_reported`: `docs/db-schema.md`
+- `agent_reported`: `backend/migrations/0001_initial.up.sql`
+- `agent_reported`: `backend/migrations/0002_system_config_defaults.up.sql`
+- `agent_reported`: `backend/cmd/server/main.go`
+- `agent_reported`: `backend/internal/admin/handler.go`
+- `agent_reported`: `backend/internal/admin/service.go`
+- `agent_reported`: `backend/internal/admin/service_test.go`
+- `agent_reported`: `backend/internal/admin/postgres.go`
+
+### Commands Run
+
+- `agent_reported`: `sed -n ...` reads for VibeHub files, docs, migrations, and admin backend files.
+- `agent_reported`: `tail -n 180 .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/output.md`
+- `agent_reported`: `gofmt -w backend/cmd/server/main.go backend/internal/admin/handler.go backend/internal/admin/postgres.go backend/internal/admin/service.go backend/internal/admin/service_test.go`
+- `agent_reported`: `go test ./...`
+- `agent_reported`: `docker compose -f deploy/docker-compose.yml up --build -d backend`
+- `agent_reported`: `node -e ...` local HTTP smoke; sandbox run failed with `EPERM 127.0.0.1:8080`, escalated rerun succeeded.
+- `agent_reported`: `curl -s -S http://127.0.0.1:8080/healthz`
+- `agent_reported`: `git status --short`
+- `agent_reported`: `git diff --stat`
+
+### Tests Run
+
+- `hard_observed`: `go test ./...` passed after B10 implementation.
+- `hard_observed`: `docker compose -f deploy/docker-compose.yml up --build -d backend` rebuilt and restarted the backend successfully.
+- `hard_observed`: B10 HTTP smoke returned `export_status=200`, `plan_status=200`, `restore_status=200`, `hash_matches=true`, and summary counts `system_config=5`, `seats=385`, `students=12`, `seat_bookings=4`, `checkin_events=2`, `audit_logs=18`.
+- `hard_observed`: `/healthz` returned `{"service":"lalalandshow-backend","status":"ok"}` after B10 restore smoke.
+
+### Context Still Needed
+
+- `inferred`: Need B12 load-test target numbers and acceptable p95 latency/error thresholds.
+- `inferred`: Need production policy for how often app-level JSON backups should be downloaded and whether SQL backups should be copied off-host.
+
+### Warnings
+
+- `agent_reported`: B10 live restore smoke appends an `admin_restore` audit row to the local Compose database as runtime test evidence.
+- `hard_observed`: VibeHub canonical task/run pointers were not edited manually.
+
+### Next Session Should
+
+- `inferred`: Continue B12 load testing and capacity validation.
+- `agent_reported`: Keep using VibeHub output files for reported state and do not manually edit `.vibehub/state.yaml` or canonical task/run pointers.
