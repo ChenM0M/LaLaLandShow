@@ -863,3 +863,72 @@
 
 - `inferred`: Continue B12 load testing and capacity validation.
 - `agent_reported`: Keep using VibeHub output files for reported state and do not manually edit `.vibehub/state.yaml` or canonical task/run pointers.
+
+---
+
+## Backend B12 Load Testing - 2026-05-29T16:25Z
+
+### Completed
+
+- `user_confirmed`: User asked to continue until the remaining backend work is finished.
+- `hard_observed`: Added reusable Go load-test command under `backend/cmd/loadtest`.
+- `hard_observed`: Load-test command supports `health` mode for concurrent `/healthz` requests.
+- `hard_observed`: Load-test command supports `booking` mode for synthetic student login plus concurrent `POST /api/seats/book` attempts.
+- `hard_observed`: Booking mode can export a B10 snapshot before the run and restore it afterward with `-restore-after=true`.
+- `hard_observed`: Archived local smoke results in `docs/load-test-report.md`.
+- `hard_observed`: Updated operations docs with B12 commands.
+
+### Not Yet Done
+
+- `inferred`: A full 1200-request rush run was not executed in this session to avoid spending local DB capacity and because final production thresholds were not specified.
+- `inferred`: Production tuning for PostgreSQL `max_connections` / `shared_buffers` should be based on a full target-environment run.
+
+### Key Decisions Made
+
+- `agent_reported`: Used a Go load-test command rather than adding vegeta/k6 as a new external dependency.
+- `agent_reported`: Made booking load tests reversible by integrating with B10 backup/restore.
+- `agent_reported`: Documented that 201 is success, 409 is expected contention, and 429 indicates limiter bottleneck rather than booking bottleneck.
+
+### Files Changed
+
+- `hard_observed`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/output.md`
+- `hard_observed`: `backend/cmd/loadtest/main.go`
+- `hard_observed`: `docs/load-test-report.md`
+- `hard_observed`: `docs/operations.md`
+
+### Files Reportedly Read
+
+- `agent_reported`: `.vibehub/notes/02-implementation.md`
+- `agent_reported`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/output.md`
+- `agent_reported`: `docs/operations.md`
+
+### Commands Run
+
+- `agent_reported`: `rg -n "B12|load|压测|benchmark|capacity|concurrency|2C2G" ...`
+- `agent_reported`: `sed -n '320,350p' .vibehub/notes/02-implementation.md`
+- `agent_reported`: `gofmt -w backend/cmd/loadtest/main.go`
+- `agent_reported`: `go test ./...`
+- `agent_reported`: `go run ./cmd/loadtest -mode health -requests 50 -concurrency 10`; sandbox run reported local network errors, escalated rerun succeeded.
+- `agent_reported`: `go run ./cmd/loadtest -mode booking -requests 12 -concurrency 4 -restore-after=true`; escalated rerun succeeded after accepting existing 201 Created responses as success.
+- `agent_reported`: `git status --short`
+- `agent_reported`: `git diff --stat`
+
+### Tests Run
+
+- `hard_observed`: `go test ./...` passed after adding the load-test command.
+- `hard_observed`: Health load smoke returned `requests=50`, `concurrency=10`, `errors=0`, `statuses.200=50`, and p95 around `9.589333ms`.
+- `hard_observed`: Booking load smoke returned `requests=12`, `concurrency=4`, `errors=0`, `statuses.201=12`, and p95 around `7.666167ms`; restore-after completed without reporting a restore failure.
+
+### Context Still Needed
+
+- `inferred`: Need production target thresholds before declaring a real 1200-user run "passed" rather than merely runnable.
+
+### Warnings
+
+- `agent_reported`: Full 1200 rush testing should raise `RATE_LIMIT_GENERIC_MAX` / `RATE_LIMIT_BOOKING_MAX` or disable rate limiting for the test window, otherwise 429s measure limiter behavior.
+- `agent_reported`: Booking load-test restore appends an `admin_restore` audit row, just like B10 restore smoke.
+
+### Next Session Should
+
+- `inferred`: Run the full rush command on the target deployment host and tune PostgreSQL/Fiber settings from that report.
+- `agent_reported`: Backend B8-B12 feature coverage is now implemented locally with smoke validation for B9, B10, B11, and B12 tooling.

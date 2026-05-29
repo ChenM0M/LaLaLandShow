@@ -43,3 +43,9 @@ Admin B10 notes:
 - `POST /api/admin/backup/restore` requires the exact snapshot plus its confirmation token. Restore replaces business data in one PostgreSQL transaction and records `audit_logs.action = 'admin_restore'`.
 - Staff credentials are excluded from JSON backups; keep `ADMIN_USERS`, `ADMIN_PASSWORDS`, `CHECKER_USER`, and `CHECKER_PASSWORD` in deployment secrets.
 - Keep the shell `deploy/backup.sh` SQL dump for infrastructure-level disaster recovery; use JSON backup/restore for admin-operated app data moves.
+
+B12 load testing:
+
+- `go run ./cmd/loadtest -mode health -requests 50 -concurrency 10` runs a quick health check load smoke.
+- `go run ./cmd/loadtest -mode booking -requests 1200 -concurrency 120 -restore-after=true` simulates a booking rush and restores the pre-test snapshot afterward.
+- See `docs/load-test-report.md` for the archived local smoke results and full-rush command.
