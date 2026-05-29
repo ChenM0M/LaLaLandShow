@@ -14,6 +14,14 @@ Staff accounts are upserted at backend startup:
 - `CHECKER_USER` and `CHECKER_PASSWORD` seed the default checker account.
 - Passwords are stored in `staff_accounts` as bcrypt hashes.
 
+Rate limiting:
+
+- Enabled by default with `RATE_LIMIT_ENABLED=true`.
+- `RATE_LIMIT_WINDOW` defaults to `1m`.
+- `RATE_LIMIT_GENERIC_MAX` defaults to `300` requests per client/window.
+- `RATE_LIMIT_BOOKING_MAX` defaults to `1200` booking attempts per client/window so opening rush traffic has a higher ceiling.
+- When Redis is configured, limiter counters are stored under the `lalaland:rate:` key prefix; without Redis the Fiber in-memory limiter is used for local development.
+
 Admin B8 notes:
 
 - Admin API login uses `POST /api/admin/login` and only accepts staff rows with role `admin`.
@@ -21,3 +29,9 @@ Admin B8 notes:
 - Students affected by an admin seat change receive `students.pending_notice`; the frontend should show it after login or `/api/student/me`, then call `POST /api/student/notice/ack` after the student confirms.
 - Public landing/status pages can read `/api/public/config` and `/api/public/window-state` without a token.
 - B8 CSV exports are available from `/api/admin/export/students.csv`, `/api/admin/export/bookings.csv`, `/api/admin/export/audit.csv`, and `/api/admin/export/checkin.csv`.
+
+Admin B9 notes:
+
+- Dashboard data is available from `GET /api/admin/dashboard`.
+- Counts are computed from PostgreSQL at request time so the dashboard reflects the same source of truth used by booking and check-in flows.
+- `last_minute_rate` uses approved check-in events in the trailing minute, matching the checker stats definition.

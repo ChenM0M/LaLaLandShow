@@ -13,6 +13,10 @@ services:
       ADMIN_PASSWORDS: "${ADMIN_PASSWORDS:-change-me-admin}"
       CHECKER_USER: "${CHECKER_USER:-checker}"
       CHECKER_PASSWORD: "${CHECKER_PASSWORD:-change-me-checker}"
+      RATE_LIMIT_ENABLED: "${RATE_LIMIT_ENABLED:-true}"
+      RATE_LIMIT_WINDOW: "${RATE_LIMIT_WINDOW:-1m}"
+      RATE_LIMIT_GENERIC_MAX: "${RATE_LIMIT_GENERIC_MAX:-300}"
+      RATE_LIMIT_BOOKING_MAX: "${RATE_LIMIT_BOOKING_MAX:-1200}"
       RUN_MIGRATIONS: "true"
       SEED_SEATS: "true"
     ports:

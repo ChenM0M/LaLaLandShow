@@ -42,6 +42,7 @@ type Store interface {
 	ListStudents(ctx context.Context, filter StudentFilter) (StudentList, error)
 	ListAuditLogs(ctx context.Context, filter AuditFilter) (AuditLogList, error)
 	ListCheckinEvents(ctx context.Context, filter CheckinFilter) (CheckinEventList, error)
+	DashboardStats(ctx context.Context, now time.Time) (DashboardStats, error)
 	GetConfig(ctx context.Context, key string) (ConfigEntry, error)
 	SetConfig(ctx context.Context, input ConfigInput) (ConfigEntry, error)
 	PublicConfig(ctx context.Context) (map[string]json.RawMessage, error)
@@ -195,6 +196,44 @@ type CheckinEventList struct {
 	PageSize int               `json:"page_size"`
 }
 
+type DashboardStats struct {
+	GeneratedAt time.Time          `json:"generated_at"`
+	Window      WindowState        `json:"window"`
+	Seats       DashboardSeatStats `json:"seats"`
+	Students    DashboardStudents  `json:"students"`
+	Checkins    DashboardCheckins  `json:"checkins"`
+	Recent      DashboardRecent    `json:"recent"`
+}
+
+type DashboardSeatStats struct {
+	Total          int `json:"total"`
+	Booked         int `json:"booked"`
+	Free           int `json:"free"`
+	Blocked        int `json:"blocked"`
+	StudentBooked  int `json:"student_booked"`
+	CustomOccupied int `json:"custom_occupied"`
+}
+
+type DashboardStudents struct {
+	Total         int `json:"total"`
+	Registered    int `json:"registered"`
+	NeedRegister  int `json:"need_register"`
+	PendingNotice int `json:"pending_notice"`
+}
+
+type DashboardCheckins struct {
+	Approved       int `json:"approved"`
+	Rejected       int `json:"rejected"`
+	UniqueStudents int `json:"unique_students"`
+	FirstScans     int `json:"first_scans"`
+	LastMinuteRate int `json:"last_minute_rate"`
+}
+
+type DashboardRecent struct {
+	AuditLogs     []AuditLogRow     `json:"audit_logs"`
+	CheckinEvents []CheckinEventRow `json:"checkin_events"`
+}
+
 type ConfigInput struct {
 	Key       string
 	ValueJSON json.RawMessage
@@ -321,6 +360,10 @@ func (s *Service) ListCheckinEvents(ctx context.Context, filter CheckinFilter) (
 		return CheckinEventList{}, student.ErrInvalidStudentID
 	}
 	return s.store.ListCheckinEvents(ctx, filter)
+}
+
+func (s *Service) DashboardStats(ctx context.Context) (DashboardStats, error) {
+	return s.store.DashboardStats(ctx, s.now())
 }
 
 func (s *Service) GetConfig(ctx context.Context, key string) (ConfigEntry, error) {

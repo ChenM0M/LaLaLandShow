@@ -3,8 +3,8 @@
 Task: T-20260529133755-69e7bd66
 Run: R-20260529133755-405932d7
 Phase: Align
-Generated at: 2026-05-29T15:42:55Z
-Source commit: unavailable
+Generated at: 2026-05-29T15:52:42Z
+Source commit: 3b2330b
 
 ## Instructions
 
@@ -42,19 +42,27 @@ Report files read, commands run, decisions made, and unresolved risks.
   {
     "capability": "align",
     "completed": [
-      "`hard_observed`: 使用 Next.js 16.2.6 初始化前端项目",
-      "`hard_observed`: 配置 TypeScript 和 ESLint",
-      "`hard_observed`: 配置 TailwindCSS v4",
-      "`hard_observed`: 设置设计 token（紫 `#6D28D9` / 深蓝 `#0F172A` / 夕阳黄 `#F59E0B`）",
-      "`hard_observed`: 创建基础路由结构（/, /book, /me, /check, /admin）",
-      "`hard_observed`: 创建全局布局和导航组件",
-      "`hard_observed`: 项目构建成功"
+      "`user_confirmed`: User asked to continue推进 `b8`.",
+      "`hard_observed`: Continued under active VibeHub task `T-20260529133755-69e7bd66` / run `R-20260529133755-405932d7` without editing canonical VibeHub state files.",
+      "`hard_observed`: Added Backend B8 admin module with admin-only login and staff JWT protection for `/api/admin/*`.",
+      "`hard_observed`: Added `GET /api/admin/seats`, `POST /api/admin/seats/:id/assign`, and `POST /api/admin/seats/:id/lock`.",
+      "`hard_observed`: Admin assignment supports student assignment, `custom_label` occupancy, release, conflict `409`, and forced release/reassignment via `force_release_existing=true`.",
+      "`hard_observed`: Forced admin seat changes write `students.pending_notice` payloads for affected students.",
+      "`hard_observed`: Student login and `/api/student/me` now expose `pending_notice`; `POST /api/student/notice/ack` clears it.",
+      "`hard_observed`: Added admin list APIs for students, audit logs, and check-in events with pagination/filter inputs.",
+      "`hard_observed`: Added admin system config read/upsert APIs and public `/api/public/config` plus `/api/public/window-state`.",
+      "`hard_observed`: Added admin CSV exports for `students`, `bookings`, `audit`, and `checkin`.",
+      "`hard_observed`: Updated API, DB schema, and operations docs for B8 behavior.",
+      "`hard_observed`: Rebuilt and restarted the Docker Compose backend container successfully.",
+      "`hard_observed`: HTTP smoke verified admin login, seat custom hold, expected `409` conflict without force, forced student assignment, student pending notice, notice ack, admin config update, public config, public window state, bookings CSV export, config restore, and admin release cleanup."
     ],
     "full_ref": ".vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/output.md",
     "key_decisions": [
-      "`user_confirmed`: 选择 Next.js 作为前端框架",
-      "`hard_observed`: 使用 TailwindCSS v4 进行样式管理",
-      "`hard_observed`: 设计 token 定义在 globals.css 中"
+      "`agent_reported`: Kept admin auth on the existing staff account/JWT path, but restricted `/api/admin/*` to role `admin`.",
+      "`agent_reported`: Treated `force_release_existing=true` as the confirmation boundary for both target-seat conflicts and target-student existing bookings.",
+      "`agent_reported`: Implemented admin seat changes as direct transactional writes to `seat_bookings`, with audit records and pending notices, rather than routing through student booking time-window rules.",
+      "`agent_reported`: Added public config/window-state reads alongside B8 config CRUD so the existing frontend landing/status pages have backend support.",
+      "`agent_reported`: Left backup/restore and dashboard stats for B9/B10 rather than mixing later backend phases into B8."
     ]
   }
 ]

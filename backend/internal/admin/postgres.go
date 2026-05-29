@@ -426,6 +426,79 @@ LIMIT $3 OFFSET $4`, filter.StudentID, filter.Method, filter.PageSize, offset)
 	return list, nil
 }
 
+func (s *PostgresStore) DashboardStats(ctx context.Context, now time.Time) (DashboardStats, error) {
+	stats := DashboardStats{GeneratedAt: now.UTC()}
+
+	window, err := s.WindowState(ctx, now)
+	if err != nil {
+		return DashboardStats{}, err
+	}
+	stats.Window = window
+
+	if err := s.db.QueryRow(ctx, `
+SELECT count(*)::int,
+       count(b.seat_id)::int,
+       count(*) FILTER (WHERE b.seat_id IS NULL AND NOT se.is_blocked)::int,
+       count(*) FILTER (WHERE se.is_blocked)::int,
+       count(*) FILTER (WHERE b.student_id IS NOT NULL)::int,
+       count(*) FILTER (WHERE b.custom_label IS NOT NULL)::int
+FROM seats se
+LEFT JOIN seat_bookings b ON b.seat_id = se.seat_id`).Scan(
+		&stats.Seats.Total,
+		&stats.Seats.Booked,
+		&stats.Seats.Free,
+		&stats.Seats.Blocked,
+		&stats.Seats.StudentBooked,
+		&stats.Seats.CustomOccupied,
+	); err != nil {
+		return DashboardStats{}, fmt.Errorf("query dashboard seat stats: %w", err)
+	}
+
+	if err := s.db.QueryRow(ctx, `
+SELECT count(*)::int,
+       count(*) FILTER (WHERE class_code IS NOT NULL AND seat_no_in_class IS NOT NULL)::int,
+       count(*) FILTER (WHERE class_code IS NULL OR seat_no_in_class IS NULL)::int,
+       count(*) FILTER (WHERE pending_notice IS NOT NULL)::int
+FROM students`).Scan(
+		&stats.Students.Total,
+		&stats.Students.Registered,
+		&stats.Students.NeedRegister,
+		&stats.Students.PendingNotice,
+	); err != nil {
+		return DashboardStats{}, fmt.Errorf("query dashboard student stats: %w", err)
+	}
+
+	if err := s.db.QueryRow(ctx, `
+SELECT count(*) FILTER (WHERE result = 'approved')::int,
+       count(*) FILTER (WHERE result <> 'approved')::int,
+       count(DISTINCT student_id) FILTER (WHERE result = 'approved' AND student_id IS NOT NULL)::int,
+       count(*) FILTER (WHERE result = 'approved' AND is_first_scan)::int,
+       count(*) FILTER (WHERE result = 'approved' AND scanned_at >= $1::timestamptz - interval '1 minute')::int
+FROM checkin_events`, now).Scan(
+		&stats.Checkins.Approved,
+		&stats.Checkins.Rejected,
+		&stats.Checkins.UniqueStudents,
+		&stats.Checkins.FirstScans,
+		&stats.Checkins.LastMinuteRate,
+	); err != nil {
+		return DashboardStats{}, fmt.Errorf("query dashboard checkin stats: %w", err)
+	}
+
+	audit, err := s.ListAuditLogs(ctx, AuditFilter{Page: 1, PageSize: 8})
+	if err != nil {
+		return DashboardStats{}, err
+	}
+	checkins, err := s.ListCheckinEvents(ctx, CheckinFilter{Page: 1, PageSize: 8})
+	if err != nil {
+		return DashboardStats{}, err
+	}
+	stats.Recent = DashboardRecent{
+		AuditLogs:     audit.Logs,
+		CheckinEvents: checkins.Events,
+	}
+	return stats, nil
+}
+
 func (s *PostgresStore) GetConfig(ctx context.Context, key string) (ConfigEntry, error) {
 	row := s.db.QueryRow(ctx, `
 SELECT key, value_json, updated_by, updated_at

@@ -24,6 +24,7 @@ Core correctness constraints:
 - Approved entry writes to `checkin_events` with `method` values `qr`, `manual`, or `force_no_booking` and `result = 'approved'`.
 - Check-in writes use a per-student PostgreSQL advisory transaction lock before computing `is_first_scan`, so repeated scans for the same student can be distinguished reliably.
 - Checker stats derive from `checkin_events` and current `seat_bookings`; `last_minute_rate` is the number of approved scans in the trailing minute.
+- Admin dashboard stats derive from `seats`, `seat_bookings`, `students`, `checkin_events`, and recent `audit_logs`; PostgreSQL remains the realtime source of truth.
 - Admin login reuses `staff_accounts` but requires role `admin`.
 - Admin seat assignment runs in a PostgreSQL transaction, locks the target seat, optionally releases conflicting target/student bookings when `force_release_existing=true`, writes the new `seat_bookings` row, and records `audit_logs.action` as `admin_assign`, `admin_force`, or `admin_release`.
 - Admin forced student-seat changes write `students.pending_notice` with an `admin_seat_adjustment` payload; student login and `/api/student/me` expose it, and `/api/student/notice/ack` clears it.

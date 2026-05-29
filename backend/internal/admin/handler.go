@@ -33,6 +33,7 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	group.Get("/students", h.listStudents)
 	group.Get("/audit-logs", h.listAuditLogs)
 	group.Get("/checkin-events", h.listCheckinEvents)
+	group.Get("/dashboard", h.dashboard)
 	group.Get("/config/:key", h.getConfig)
 	group.Put("/config/:key", h.setConfig)
 	group.Get("/export/:type.csv", h.exportCSV)
@@ -171,6 +172,14 @@ func (h *Handler) listCheckinEvents(c fiber.Ctx) error {
 		return writeServiceError(c, err)
 	}
 	return c.JSON(list)
+}
+
+func (h *Handler) dashboard(c fiber.Ctx) error {
+	stats, err := h.service.DashboardStats(c.Context())
+	if err != nil {
+		return writeServiceError(c, err)
+	}
+	return c.JSON(stats)
 }
 
 func (h *Handler) getConfig(c fiber.Ctx) error {

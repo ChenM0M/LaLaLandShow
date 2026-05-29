@@ -640,3 +640,132 @@
 - `inferred`: Confirm whether the current untracked workspace is the intended baseline for this VibeHub task.
 - `inferred`: If confirmed, create an initial Git commit or ask VibeHub to advance the canonical phase before continuing B9/B10.
 - `inferred`: If not confirmed, split or exclude unrelated paths before feature work resumes.
+
+---
+
+## Risk Mitigation and Continue - 2026-05-29T15:58Z
+
+### Completed
+
+- `user_confirmed`: User asked to resolve risk points and continue.
+- `hard_observed`: Created root Git baseline commit `3b2330b chore: establish project baseline`, resolving the previous `git_head_unreadable` blocker.
+- `hard_observed`: Added root `.gitignore` in the baseline commit so generated `.next/`, dependency, local env, and backup artifacts are excluded while backend migrations remain tracked.
+- `hard_observed`: Ran `vibehub sync /Users/chenm0m/LocalRepo/LaLaLandShow`; sync now reports `ownership_unavailable` rather than unreadable HEAD, with VibeHub-generated state/view changes.
+- `hard_observed`: Implemented Backend B9 admin dashboard API at `GET /api/admin/dashboard`.
+- `hard_observed`: Dashboard response includes current window state, seat counts, student counts, check-in counts, and recent audit/check-in activity.
+- `hard_observed`: Implemented Backend B11 rate limiting middleware with Redis-backed Fiber storage when Redis is configured and in-memory fallback otherwise.
+- `hard_observed`: Rate limiting skips `/healthz` and `/api/seats/stream`; `/api/seats/book` has a separate higher quota.
+- `hard_observed`: Updated API, DB schema, operations, Compose, and env example docs for B9/B11.
+
+### Not Yet Done
+
+- `agent_reported`: B10 backup/restore admin APIs are still not implemented; the existing backup script remains the current backup mechanism.
+- `agent_reported`: B12 load testing is still not implemented.
+- `inferred`: Redis pub/sub fanout for multi-process SSE remains outside this B9/B11 increment.
+- `hard_observed`: VibeHub canonical current phase still reports `align` with status `completed`; agent work continues by user instruction and output reporting only.
+
+### Key Decisions Made
+
+- `agent_reported`: Treated the current workspace as the intended initial baseline because the user explicitly asked to resolve risks before continuing.
+- `agent_reported`: Chose realtime PostgreSQL dashboard aggregates rather than adding cache state before product usage proves it necessary.
+- `agent_reported`: Implemented rate limiting as global Fiber middleware with Redis storage when available, preserving the research requirement that quotas can be shared across instances.
+- `agent_reported`: Deferred restore APIs because a safe restore flow needs a stronger confirmation/maintenance-mode design than this small continuation should guess.
+
+### Files Changed
+
+- `hard_observed`: `.gitignore`
+- `hard_observed`: `.vibehub/agent-view/handoff.md`
+- `hard_observed`: `.vibehub/agent-view/sync.md`
+- `hard_observed`: `.vibehub/index/task-events.idx`
+- `hard_observed`: `.vibehub/state.yaml` changed only via `vibehub sync`, not by manual agent edit.
+- `hard_observed`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.manifest.yaml`
+- `hard_observed`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.md`
+- `hard_observed`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/events.jsonl`
+- `hard_observed`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/sync/sync-20260529-155242.md`
+- `hard_observed`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/output.md`
+- `hard_observed`: `backend/cmd/server/main.go`
+- `hard_observed`: `backend/internal/admin/handler.go`
+- `hard_observed`: `backend/internal/admin/postgres.go`
+- `hard_observed`: `backend/internal/admin/service.go`
+- `hard_observed`: `backend/internal/admin/service_test.go`
+- `hard_observed`: `backend/internal/config/config.go`
+- `hard_observed`: `backend/internal/ratelimit/middleware.go`
+- `hard_observed`: `backend/internal/ratelimit/middleware_test.go`
+- `hard_observed`: `backend/internal/ratelimit/redis_storage.go`
+- `hard_observed`: `deploy/.env.example`
+- `hard_observed`: `deploy/docker-compose.yml`
+- `hard_observed`: `docs/api.md`
+- `hard_observed`: `docs/db-schema.md`
+- `hard_observed`: `docs/operations.md`
+
+### Files Reportedly Read
+
+- `agent_reported`: `.agents/skills/vibehub-continue/SKILL.md`
+- `agent_reported`: `.vibehub/agent-view/current.md`
+- `agent_reported`: `.vibehub/agent-view/current-context.md`
+- `agent_reported`: `.vibehub/agent-view/handoff.md`
+- `agent_reported`: `.vibehub/rules/hard-rules.md`
+- `agent_reported`: `.vibehub/adapters/protocol.md`
+- `agent_reported`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.md`
+- `agent_reported`: `.vibehub/research/current/research-pack.md`
+- `agent_reported`: `.vibehub/agent-view/sync.md`
+- `agent_reported`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/output.md`
+- `agent_reported`: `docs/api.md`
+- `agent_reported`: `docs/operations.md`
+- `agent_reported`: `docs/db-schema.md`
+- `agent_reported`: `backend/cmd/server/main.go`
+- `agent_reported`: `backend/internal/config/config.go`
+- `agent_reported`: `backend/internal/admin/handler.go`
+- `agent_reported`: `backend/internal/admin/service.go`
+- `agent_reported`: `backend/internal/admin/postgres.go`
+- `agent_reported`: `backend/internal/admin/service_test.go`
+- `agent_reported`: `deploy/docker-compose.yml`
+- `agent_reported`: `deploy/.env.example`
+- `agent_reported`: Fiber limiter and storage interface files under local Go module cache.
+
+### Commands Run
+
+- `agent_reported`: `sed -n ...` reads for VibeHub skill/protocol/context/output files and backend/docs files.
+- `agent_reported`: `rg -n ...` searches for B9/B10/B11/B12, dashboard, backup, restore, rate limit, Redis, SSE, and related risks.
+- `agent_reported`: `rg --files ...`
+- `agent_reported`: `find ...`
+- `agent_reported`: `git status --short`
+- `agent_reported`: `git status --short --ignored`
+- `agent_reported`: `git add .`
+- `agent_reported`: `git diff --cached --stat`
+- `hard_observed`: `git commit -m "chore: establish project baseline"` created commit `3b2330b`.
+- `agent_reported`: `vibehub sync /Users/chenm0m/LocalRepo/LaLaLandShow`
+- `agent_reported`: `gofmt -w ...`
+- `agent_reported`: `go test ./...`
+- `agent_reported`: `docker compose -f deploy/docker-compose.yml ps`
+- `agent_reported`: `docker compose -f deploy/docker-compose.yml up --build -d backend`
+- `agent_reported`: `curl -s -S http://127.0.0.1:8080/healthz`
+- `agent_reported`: `curl -s -S -X POST http://127.0.0.1:8080/api/admin/login ...`
+- `agent_reported`: `curl -s -S http://127.0.0.1:8080/api/admin/dashboard ...`
+- `agent_reported`: `git diff --name-only`
+- `agent_reported`: `git log --oneline --max-count=3`
+
+### Tests Run
+
+- `hard_observed`: `go test ./...` passed after B9/B11 implementation.
+- `hard_observed`: `docker compose -f deploy/docker-compose.yml up --build -d backend` rebuilt and restarted the backend successfully.
+- `hard_observed`: `/healthz` returned `{"service":"lalalandshow-backend","status":"ok"}` after rebuild.
+- `hard_observed`: Admin login returned 200 with an admin token after rebuild.
+- `hard_observed`: `GET /api/admin/dashboard` returned 200 with counts including `seats.total=385`, `seats.blocked=24`, `window.state="open"`, and recent activity arrays.
+
+### Context Still Needed
+
+- `inferred`: Need product/ops decision for B10 restore safety: whether restore requires maintenance mode, a one-time confirmation token, and whether restores are allowed from API in production.
+- `inferred`: Need load-test target numbers and acceptable p95 latency/error thresholds for B12.
+- `inferred`: Need VibeHub/user direction on whether to continue into B10 backup/restore or B12 load testing next.
+
+### Warnings
+
+- `hard_observed`: `vibehub sync` still reports `needs_attention` with `ownership_unavailable` because VibeHub state/task ownership projection is not fully aligned, although Git now has a baseline commit.
+- `hard_observed`: VibeHub generated changes in `.vibehub/state.yaml`, agent-view files, context pack files, and events; these were produced by `vibehub sync`, not manual edits.
+- `agent_reported`: Local Compose database still contains prior smoke-test rows, so dashboard counts reflect runtime test data.
+
+### Next Session Should
+
+- `inferred`: Continue Backend B10 with an explicit safe backup/restore design, or run B12 load testing if deployment performance risk is more urgent.
+- `agent_reported`: Keep using VibeHub output files for reported state and do not manually edit canonical task/run pointers.

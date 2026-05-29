@@ -1,6 +1,6 @@
 # VibeHub 同步报告
 
-生成时间: 2026-05-29T15:42:55Z
+生成时间: 2026-05-29T15:52:42Z
 生成来源: VibeHub backend
 证据等级: mixed
 
@@ -10,10 +10,10 @@
 - 运行: R-20260529133755-405932d7
 - 阶段: align
 - Git 是否有未提交变更: true
-- 变更文件数: 14
+- 变更文件数: 6
 
-- Sync level: rebuild (git_head_unreadable)
-- Sync signals: delta_t=Some(1029), delta_head=unknown, delta_overlap_per_mille=None
+- Sync level: rebuild (ownership_unavailable)
+- Sync signals: delta_t=Some(587), delta_head=unknown, delta_overlap_per_mille=None
 
 证据等级: hard_observed
 
@@ -28,26 +28,18 @@
 
 ## 变更文件
 
-- .agents/
-- .antigravity/
-- .claude/
-- .codex/
-- .cursor/
-- .opencode/
-- .vibehub/
-- AGENTS.md
-- CLAUDE.md
-- backend/
-- deploy/
-- docs/
-- frontend/
-- opencode.json
+- .vibehub/agent-view/handoff.md
+- .vibehub/index/task-events.idx
+- .vibehub/state.yaml
+- .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.manifest.yaml
+- .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.md
+- .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/events.jsonl
 
 证据等级: hard_observed
 
 ## 需要用户确认的问题
 
-- Git 当前有 14 个变更文件。这些变更是否都属于当前 VibeHub 任务？如不是，请说明哪些需要排除或另开任务。
+- Git 当前有 6 个变更文件。这些变更是否都属于当前 VibeHub 任务？如不是，请说明哪些需要排除或另开任务。
 
 证据等级: inferred
 
@@ -61,7 +53,6 @@
 ## 警告
 
 - Git 工作区存在 VibeHub 状态之外观察到的未提交变更。
-- 循环警告：14 个变更文件已达到或超过 repeated_file_edits 阈值 8。
 - Event/state consistency warning: state flow.implement is 'pending' but event projection is 'active'.
 - Event/state consistency warning: state flow.plan is 'pending' but event projection is 'active'.
 

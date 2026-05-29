@@ -19,6 +19,7 @@ import (
 	"lalalandshow/backend/internal/checker"
 	"lalalandshow/backend/internal/config"
 	"lalalandshow/backend/internal/migrate"
+	"lalalandshow/backend/internal/ratelimit"
 	"lalalandshow/backend/internal/seat"
 	"lalalandshow/backend/internal/student"
 	"lalalandshow/backend/internal/ticket"
@@ -90,6 +91,9 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	})
 	app.Use(recover.New())
+	if cfg.RateLimit.Enabled {
+		app.Use(ratelimit.New(cfg.RateLimit, redisClient))
+	}
 
 	app.Get("/healthz", func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{

@@ -1,6 +1,6 @@
 # API Notes
 
-This file tracks the backend API contract as B0-B8 are implemented.
+This file tracks the backend API contract as B0-B9 are implemented.
 
 Initial health endpoint:
 
@@ -120,6 +120,14 @@ Student identity endpoints:
 - `GET /api/admin/checkin-events`
   - Admin bearer token required.
   - Query params: `page`, `page_size`, `student_id`, `method`.
+- `GET /api/admin/dashboard`
+  - Admin bearer token required.
+  - Returns realtime dashboard aggregates:
+    - `window`: current booking window state.
+    - `seats`: total/booked/free/blocked/student-booked/custom-occupied counts.
+    - `students`: total/registered/need-register/pending-notice counts.
+    - `checkins`: approved/rejected/unique-student/first-scan/last-minute-rate counts.
+    - `recent`: latest audit logs and check-in events for dashboard activity feeds.
 - `GET /api/admin/config/:key`
   - Admin bearer token required.
   - Returns `{ "key": "...", "value_json": ..., "updated_by": "...", "updated_at": "..." }`.
@@ -144,3 +152,4 @@ Authentication:
 - Checker endpoints use staff JWT bearer tokens signed with `JWT_SECRET`; `admin` tokens can call checker endpoints.
 - Admin endpoints use staff JWT bearer tokens signed with `JWT_SECRET` and require role `admin`.
 - Ticket QR tokens are HMAC-SHA256 signed with `HMAC_SECRET`; check-in verification compares signatures in constant time and rejects stale `ticket_version` values.
+- API routes are rate limited and return `429` with `{ "error": "rate limit exceeded" }` when the per-window quota is exceeded; `/healthz` and `/api/seats/stream` are exempt.

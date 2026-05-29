@@ -21,6 +21,7 @@ type fakeStore struct {
 	configInput ConfigInput
 	exportType  string
 	windowState WindowState
+	dashboardAt time.Time
 }
 
 func (s *fakeStore) FindStaffAccount(_ context.Context, _ string) (StaffAccount, error) {
@@ -56,6 +57,11 @@ func (s *fakeStore) ListAuditLogs(_ context.Context, filter AuditFilter) (AuditL
 
 func (s *fakeStore) ListCheckinEvents(_ context.Context, filter CheckinFilter) (CheckinEventList, error) {
 	return CheckinEventList{Page: filter.Page, PageSize: filter.PageSize}, nil
+}
+
+func (s *fakeStore) DashboardStats(_ context.Context, now time.Time) (DashboardStats, error) {
+	s.dashboardAt = now
+	return DashboardStats{GeneratedAt: now.UTC(), Window: WindowState{State: "open"}}, nil
 }
 
 func (s *fakeStore) GetConfig(_ context.Context, key string) (ConfigEntry, error) {
@@ -156,5 +162,23 @@ func TestServiceExportTypeWhitelist(t *testing.T) {
 	}
 	if _, err := service.ExportCSV(context.Background(), "secrets"); !errors.Is(err, ErrInvalidExportType) {
 		t.Fatalf("ExportCSV(secrets) error = %v, want %v", err, ErrInvalidExportType)
+	}
+}
+
+func TestServiceDashboardStatsUsesServiceClock(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(store, auth.NewManager("jwt-secret", time.Hour))
+	now := time.Date(2026, 5, 29, 12, 30, 0, 0, time.FixedZone("CST", 8*60*60))
+	service.now = func() time.Time { return now }
+
+	stats, err := service.DashboardStats(context.Background())
+	if err != nil {
+		t.Fatalf("DashboardStats() error = %v", err)
+	}
+	if !store.dashboardAt.Equal(now) {
+		t.Fatalf("dashboardAt = %v, want %v", store.dashboardAt, now)
+	}
+	if stats.GeneratedAt.Location() != time.UTC {
+		t.Fatalf("GeneratedAt location = %v, want UTC", stats.GeneratedAt.Location())
 	}
 }

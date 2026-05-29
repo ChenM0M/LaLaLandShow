@@ -23,7 +23,15 @@ type Config struct {
 	JWTSecret     string
 	HMACSecret    string
 	JWTTTL        time.Duration
+	RateLimit     RateLimitConfig
 	StaffAccounts []StaffAccount
+}
+
+type RateLimitConfig struct {
+	Enabled    bool
+	Window     time.Duration
+	GenericMax int
+	BookingMax int
 }
 
 func Load() Config {
@@ -37,6 +45,12 @@ func Load() Config {
 		JWTSecret:     getEnv("JWT_SECRET", "change-me"),
 		HMACSecret:    getEnv("HMAC_SECRET", "change-me"),
 		JWTTTL:        getDurationEnv("JWT_TTL", 12*time.Hour),
+		RateLimit: RateLimitConfig{
+			Enabled:    getBoolEnv("RATE_LIMIT_ENABLED", true),
+			Window:     getDurationEnv("RATE_LIMIT_WINDOW", time.Minute),
+			GenericMax: getIntEnv("RATE_LIMIT_GENERIC_MAX", 300),
+			BookingMax: getIntEnv("RATE_LIMIT_BOOKING_MAX", 1200),
+		},
 		StaffAccounts: loadStaffAccounts(),
 	}
 }
@@ -68,6 +82,18 @@ func getDurationEnv(key string, fallback time.Duration) time.Duration {
 	}
 	parsed, err := time.ParseDuration(value)
 	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func getIntEnv(key string, fallback int) int {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
 		return fallback
 	}
 	return parsed
