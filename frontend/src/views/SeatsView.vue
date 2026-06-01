@@ -34,7 +34,8 @@ const initialPanY = ref(0)
 const isPanning = ref(false)
 const hasDragged = ref(false)
 const panStart = ref({ x: 0, y: 0, panX: 0, panY: 0 })
-const activePointers = ref(new Map<number, { x: number; y: number }>())
+const activePointers = new Map<number, { x: number; y: number }>()
+const activePointerCount = ref(0)
 const initialPinchDist = ref(0)
 const initialPinchZoom = ref(1)
 const initialPinchCenter = ref({ screenX: 0, screenY: 0, contentX: 0, contentY: 0 })
@@ -49,6 +50,8 @@ const mapMetrics = ref({
 })
 let centerTimer: number | undefined
 let metricFrame: number | undefined
+let transformFrame: number | undefined
+let queuedTransform: { zoom: number; panX: number; panY: number } | null = null
 
 const zoneLabels: Record<string, string> = {
   left: '左區',
@@ -104,7 +107,6 @@ const isReplacingGroup = computed(() => hasManagedBookings.value && (!myBooking.
 const isChangingOwnSeat = computed(() => Boolean(myBooking.value) && !isReplacingGroup.value)
 const selectedSeats = computed(() => selectedSeatSlots.value.filter((seat): seat is Seat => seat !== null))
 const selectedSeatIds = computed(() => new Set(selectedSeats.value.map(seat => seat.seat_id)))
-const activePointerCount = computed(() => activePointers.value.size)
 const showMiniMap = computed(() => zoom.value > initialZoom.value + 0.16)
 const minimapViewportStyle = computed(() => ({
   left: `${Math.max(0, Math.min(92, (mapMetrics.value.left / mapMetrics.value.mapWidth) * 100))}%`,
@@ -376,11 +378,47 @@ async function handleNoticePrimary() {
 }
 
 function setZoomAroundContent(next: number, contentX: number, contentY: number, screenX: number, screenY: number) {
-  zoom.value = Math.min(2.15, Math.max(0.36, Number(next.toFixed(2))))
-  panX.value = Math.round(screenX - contentX * zoom.value)
-  panY.value = Math.round(screenY - contentY * zoom.value)
+  const nextZoom = Math.min(2.15, Math.max(0.36, Number(next.toFixed(2))))
+  queueTransform(
+    nextZoom,
+    Math.round(screenX - contentX * nextZoom),
+    Math.round(screenY - contentY * nextZoom),
+  )
+}
+
+function updatePointerCount() {
+  activePointerCount.value = activePointers.size
+}
+
+function applyTransform(nextZoom: number, nextPanX: number, nextPanY: number) {
+  zoom.value = nextZoom
+  panX.value = nextPanX
+  panY.value = nextPanY
   clampPan()
   scheduleMapMetrics()
+}
+
+function queueTransform(nextZoom: number, nextPanX: number, nextPanY: number) {
+  queuedTransform = { zoom: nextZoom, panX: nextPanX, panY: nextPanY }
+  if (transformFrame) return
+  transformFrame = window.requestAnimationFrame(() => {
+    transformFrame = undefined
+    if (!queuedTransform) return
+    const next = queuedTransform
+    queuedTransform = null
+    applyTransform(next.zoom, next.panX, next.panY)
+  })
+}
+
+function flushQueuedTransform() {
+  if (!queuedTransform) return
+  if (transformFrame) {
+    window.cancelAnimationFrame(transformFrame)
+    transformFrame = undefined
+  }
+  const next = queuedTransform
+  queuedTransform = null
+  applyTransform(next.zoom, next.panX, next.panY)
 }
 
 function visibleCenter() {
@@ -627,7 +665,8 @@ async function submitSelection() {
 }
 
 function beginPinch() {
-  const points = Array.from(activePointers.value.values())
+  flushQueuedTransform()
+  const points = Array.from(activePointers.values())
   if (points.length < 2) return
   const dx = points[0].x - points[1].x
   const dy = points[0].y - points[1].y
@@ -647,7 +686,8 @@ function beginPinch() {
 
 function registerPointer(event: PointerEvent, allowSingleFingerPan: boolean) {
   lastPointerType.value = event.pointerType
-  activePointers.value.set(event.pointerId, { x: event.clientX, y: event.clientY })
+  activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+  updatePointerCount()
 
   try {
     ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
@@ -655,7 +695,7 @@ function registerPointer(event: PointerEvent, allowSingleFingerPan: boolean) {
     // Some browsers may reject capture for synthetic or already-captured pointers.
   }
 
-  if (activePointers.value.size >= 2) {
+  if (activePointers.size >= 2) {
     beginPinch()
     return
   }
@@ -681,11 +721,11 @@ function startSeatPointer(event: PointerEvent) {
 }
 
 function movePan(event: PointerEvent) {
-  if (!activePointers.value.has(event.pointerId)) return
-  activePointers.value.set(event.pointerId, { x: event.clientX, y: event.clientY })
+  if (!activePointers.has(event.pointerId)) return
+  activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
 
-  if (activePointers.value.size === 2) {
-    const points = Array.from(activePointers.value.values())
+  if (activePointers.size === 2) {
+    const points = Array.from(activePointers.values())
     const dx = points[0].x - points[1].x
     const dy = points[0].y - points[1].y
     const dist = Math.hypot(dx, dy)
@@ -708,16 +748,15 @@ function movePan(event: PointerEvent) {
   const dy = event.clientY - panStart.value.y
   const dragThreshold = event.pointerType === 'touch' ? 9 : 5
   if (Math.abs(dx) > dragThreshold || Math.abs(dy) > dragThreshold) hasDragged.value = true
-  panX.value = panStart.value.panX + dx
-  panY.value = panStart.value.panY + dy
-  clampPan()
-  scheduleMapMetrics()
+  queueTransform(zoom.value, panStart.value.panX + dx, panStart.value.panY + dy)
 }
 
 function endPan(event: PointerEvent) {
-  activePointers.value.delete(event.pointerId)
-  if (activePointers.value.size < 2) initialPinchDist.value = 0
-  if (activePointers.value.size === 0) {
+  activePointers.delete(event.pointerId)
+  updatePointerCount()
+  if (activePointers.size < 2) initialPinchDist.value = 0
+  if (activePointers.size === 0) {
+    flushQueuedTransform()
     isPanning.value = false
     try {
       ;(event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId)
@@ -761,6 +800,7 @@ onMounted(async () => {
 onUnmounted(() => {
   if (centerTimer) window.clearTimeout(centerTimer)
   if (metricFrame) window.cancelAnimationFrame(metricFrame)
+  if (transformFrame) window.cancelAnimationFrame(transformFrame)
   window.removeEventListener('resize', centerMap)
   seats.disconnectStream()
 })

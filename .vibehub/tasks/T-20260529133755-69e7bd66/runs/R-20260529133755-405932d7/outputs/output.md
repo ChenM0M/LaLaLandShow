@@ -29,6 +29,13 @@
 - `hard_observed`: 已确认原因之一是 `startSeatPointer` 对座位落点只登记 pointer、不允许单指 pan，导致手指按在座位密集区域时无法拖动地图，而按在空白区域可以拖动。
 - `hard_observed`: 已将座位上的 pointer down 也接入单指 pan；现在手指落在座位上时，移动超过触摸阈值会拖动地图，未超过阈值才保留点选座位行为。
 - `hard_observed`: 已重新运行 `npm run build`，前端构建通过。
+- `user_confirmed`: 用户要求继续检查客户端显示卡顿风险，尤其是选座页，并优化修复。
+- `hard_observed`: 已审计 `frontend/src/views/SeatsView.vue` 的拖动/缩放热路径，发现 `pointermove` 中会高频更新响应式 `Map`、响应式 pan/zoom，并立即执行 DOM 查询、边界钳制和缩略图指标更新。
+- `hard_observed`: 已将 `activePointers` 从响应式 `Map` 改为普通 `Map`，只用轻量 `activePointerCount` ref 暴露模板所需计数，避免每个 pointermove 都触发 Vue 对 Map 的响应式追踪。
+- `hard_observed`: 已新增 `queueTransform`、`applyTransform`、`flushQueuedTransform`，将拖动和双指缩放的 transform 更新合并到 `requestAnimationFrame`，每帧最多执行一次 pan/zoom、`clampPan()` 和缩略图 metrics 调度。
+- `hard_observed`: 已在进入 pinch 和手势结束时 flush 队列，避免批处理造成最终位置落后；组件卸载时取消未完成的 transform frame。
+- `hard_observed`: 已重新运行 `npm run build`，前端构建通过。
+- `hard_observed`: `git diff --check -- frontend/src/views/SeatsView.vue` 通过。
 
 ## Not Yet Done
 - `agent_reported`: 未在真实手机硬件上验证触控手感；本轮使用本地构建和浏览器移动宽度行为验证。
@@ -41,6 +48,7 @@
 - `agent_reported`: 第九幕需要像尾声一样多停一下，因此在时间线末尾加驻留段，而不是把所有幕的翻页速度继续整体变慢。
 - `agent_reported`: 选座页双指缩放必须在“手指落在座位、落在不可选座位、落在空白地图”的组合下都能进入同一套 pinch 状态机；选择座位的 click 仍由 `canSelectSeat` 兜底。
 - `agent_reported`: 触屏拖动应该不依赖落点是否刚好在座位空隙；座位密集区域按住拖动也应优先表现为地图平移，点击行为通过拖动阈值区分。
+- `agent_reported`: 选座页卡顿优先从高频手势路径治理，而不是改视觉层级；减少 pointermove 上的响应式写入和布局计算，对手机端最直接。
 - `agent_reported`: 本轮只改 `HomeView.vue` 和 `SeatsView.vue`，避免把既有 dirty 的 admin/check/style 变更混入。
 
 ## Files Changed
@@ -91,6 +99,11 @@
 - `hard_observed`: `sed -n '700,1125p' frontend/src/views/HomeView.vue`
 - `hard_observed`: `sed -n '1,220p' frontend/package.json`
 - `hard_observed`: `npm run build`
+- `hard_observed`: `rg -n "getBoundingClientRect|querySelector|requestAnimationFrame|pointermove|panX|panY|zoom|computed|filter\\(|scheduleMapMetrics|clampPan" frontend/src/views/SeatsView.vue`
+- `hard_observed`: `sed -n '360,735p' frontend/src/views/SeatsView.vue`
+- `hard_observed`: `rg -n "activePointers\\.value|activePointers" frontend/src/views/SeatsView.vue`
+- `hard_observed`: `npm run build`
+- `hard_observed`: `git diff --check -- frontend/src/views/SeatsView.vue`
 - `hard_observed`: `npm run dev -- --host 127.0.0.1 --port 5173`
 - `hard_observed`: Browser automation opened `http://127.0.0.1:5173/` and sampled home flip-book state.
 - `hard_observed`: `git diff -- frontend/src/views/HomeView.vue frontend/src/views/SeatsView.vue`
@@ -112,10 +125,13 @@
 - `hard_observed`: After improving seat-map pinch handling, `npm run build` passed again.
 - `hard_observed`: `git diff --check -- frontend/src/views/SeatsView.vue` passed.
 - `hard_observed`: After enabling pan from seat hit targets, `npm run build` passed again.
+- `hard_observed`: After batching transform updates and removing reactive Map pointer churn, `npm run build` passed again.
+- `hard_observed`: `git diff --check -- frontend/src/views/SeatsView.vue` passed.
 
 ## Context Still Needed
 - `agent_reported`: User confirmation from a real touch device would be useful to tune final values for snap delay, scroll distance, and touch drag threshold.
 - `agent_reported`: User confirmation from a real touch device is still needed to validate native multi-touch behavior, because desktop automation does not fully emulate physical iOS/Android pinch input.
+- `agent_reported`: Real-device performance confirmation is still useful because the optimization targets touch hardware frame pacing and mobile browser pointer behavior.
 - `agent_reported`: The VibeHub sync question remains unresolved: current workspace had multiple dirty files before this turn, and user has not confirmed whether all are part of the active VibeHub task.
 
 ## Warnings
