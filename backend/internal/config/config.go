@@ -22,6 +22,7 @@ type Config struct {
 	RedisURL      string
 	Database      DatabaseConfig
 	MigrationsDir string
+	StaticDir     string
 	RunMigrations bool
 	SeedSeats     bool
 	JWTSecret     string
@@ -64,6 +65,7 @@ func Load() Config {
 			MaxConnIdleTime: getDurationEnv("DB_MAX_CONN_IDLE_TIME", 5*time.Minute),
 		},
 		MigrationsDir: getEnv("MIGRATIONS_DIR", "backend/migrations"),
+		StaticDir:     os.Getenv("STATIC_DIR"),
 		RunMigrations: getBoolEnv("RUN_MIGRATIONS", true),
 		SeedSeats:     getBoolEnv("SEED_SEATS", true),
 		JWTSecret:     getEnv("JWT_SECRET", "change-me"),

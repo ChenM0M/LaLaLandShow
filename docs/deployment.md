@@ -1,26 +1,35 @@
 # Image Build and Manual Deployment
 
-This project deploys as one application image plus infrastructure services:
+This project deploys as one standalone application image:
 
-- `app`: one image containing the Vite frontend, Nginx, and the Go backend.
-- `postgres` and `redis`: stateful infrastructure with named Docker volumes.
+- `app`: one image containing the Vite frontend, Nginx, the Go backend,
+  PostgreSQL, Redis, and migrations.
+- Runtime data is stored under `/data`, so mount a Docker volume there.
 
 ## Production Server Setup
 
-1. Install Docker and Docker Compose on the server.
-2. Create a deployment directory, for example `/opt/lalalandshow`.
-3. Copy `deploy/.env.prod.example` to `/opt/lalalandshow/.env`.
-4. Fill every secret in `/opt/lalalandshow/.env`.
+1. Install Docker on the server.
+2. Pull the image.
+3. Run one container with a persistent `/data` volume.
 
-Copy these files to the server deployment directory:
+Minimal deployment:
 
-- `docker-compose.prod.yml`
-- `.env.prod.example`
-- `remote-deploy.sh`
-- `backup.sh`
+```bash
+docker pull ghcr.io/chenm0m/lalalandshow/app:latest
+docker run -d \
+  --name lalalandshow \
+  --restart unless-stopped \
+  -p 18088:8080 \
+  -v lalalandshow-data:/data \
+  ghcr.io/chenm0m/lalalandshow/app:latest
+```
 
-Do not store production secrets in GitHub source files. Keep them in the
-server-side `.env` file.
+Default test accounts:
+
+- Admin: `admin` / `admin`
+- Checker: `checker` / `checker`
+
+For real use, override secrets and passwords with `-e` flags or an env file.
 
 ## GitHub Images
 
@@ -46,32 +55,33 @@ push to main
   -> CI tests backend and builds frontend
   -> Build Images workflow builds images
   -> images are pushed to GHCR
-  -> you manually pull and restart on the server
+  -> you manually pull and restart the container on the server
 ```
 
 Manual image publishing is available from the `Build Images` workflow. Leave
 `image_tag` empty to publish the current commit SHA, or provide a tag for a
 named release.
 
-On the server, set the image tag in `.release.env`:
+To update the server:
 
 ```bash
-cd /opt/lalalandshow
-cat > .release.env <<'EOF'
-APP_IMAGE=ghcr.io/chenm0m/lalalandshow/app
-IMAGE_TAG=latest
-EOF
+docker pull ghcr.io/chenm0m/lalalandshow/app:latest
+docker stop lalalandshow || true
+docker rm lalalandshow || true
+docker run -d \
+  --name lalalandshow \
+  --restart unless-stopped \
+  -p 18088:8080 \
+  -v lalalandshow-data:/data \
+  ghcr.io/chenm0m/lalalandshow/app:latest
 ```
 
-Then pull and restart:
+For a specific commit or manual release tag, replace `latest` with that exact
+tag.
 
-```bash
-cd /opt/lalalandshow
-./remote-deploy.sh
-```
-
-For a specific commit or manual release tag, replace `IMAGE_TAG=latest` with
-that exact tag.
+Docker Compose is still available as an optional wrapper via
+`deploy/docker-compose.prod.yml`, but it is no longer required for the simple
+test deployment path.
 
 ## Fast Local Deploy
 
@@ -93,27 +103,30 @@ Optional environment variables:
 - `SSH_OPTS`: extra SSH options, for example `-i ~/.ssh/deploy_key`.
 
 This path is intentionally for fast debugging. For normal testing releases,
-prefer pulling the GHCR images with `./remote-deploy.sh`.
+prefer pulling the GHCR image and recreating the container.
 
 ## Rollback
 
-On the server, edit `.release.env` and set `IMAGE_TAG` to an older known-good
-tag. Then run:
+Use the same run command with an older known-good tag:
 
 ```bash
-cd /opt/lalalandshow
-./remote-deploy.sh
+docker pull ghcr.io/chenm0m/lalalandshow/app:<old-tag>
+docker stop lalalandshow || true
+docker rm lalalandshow || true
+docker run -d \
+  --name lalalandshow \
+  --restart unless-stopped \
+  -p 18088:8080 \
+  -v lalalandshow-data:/data \
+  ghcr.io/chenm0m/lalalandshow/app:<old-tag>
 ```
 
 ## Local Production Smoke
 
-After GitHub publishes images, you can test production Compose locally:
+After GitHub publishes images, you can test locally:
 
 ```bash
-cp deploy/.env.prod.example deploy/.env
-# edit deploy/.env with local-safe secrets and real image names
-cd deploy
-docker compose --env-file .env -f docker-compose.prod.yml up -d
+docker run -d --name lalalandshow-smoke -p 18088:8080 -v lalalandshow-smoke-data:/data ghcr.io/chenm0m/lalalandshow/app:latest
 ```
 
 Open `http://localhost:18088` and check `http://localhost:18088/healthz`.

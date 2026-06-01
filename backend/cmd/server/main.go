@@ -5,11 +5,13 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/recover"
+	"github.com/gofiber/fiber/v3/middleware/static"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -136,6 +138,14 @@ func main() {
 		adminStore := admin.NewPostgresStore(db)
 		adminService := admin.NewService(adminStore, authManager, cfg.HMACSecret)
 		admin.NewHandler(adminService, authManager).RegisterRoutes(app)
+	}
+
+	if cfg.StaticDir != "" {
+		indexPath := filepath.Join(cfg.StaticDir, "index.html")
+		app.Use("/", static.New(cfg.StaticDir))
+		app.Get("/*", func(c fiber.Ctx) error {
+			return c.SendFile(indexPath)
+		})
 	}
 
 	serverErr := make(chan error, 1)
