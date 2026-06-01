@@ -1,4 +1,4 @@
-# CI/CD Deployment
+# Image Build and Manual Deployment
 
 This project deploys as three long-running services behind Docker Compose:
 
@@ -13,30 +13,25 @@ This project deploys as three long-running services behind Docker Compose:
 3. Copy `deploy/.env.prod.example` to `/opt/lalalandshow/.env`.
 4. Fill every secret in `/opt/lalalandshow/.env`.
 
-The deployment workflow copies these files to the server automatically:
+Copy these files to the server deployment directory:
 
 - `docker-compose.prod.yml`
 - `nginx.conf`
 - `.env.prod.example`
 - `remote-deploy.sh`
-- `.release.env`
 
 Do not store production secrets in GitHub source files. Keep them in the
-server-side `.env` file and in GitHub repository secrets.
+server-side `.env` file.
 
-## GitHub Secrets
+## GitHub Images
 
-Configure these repository or environment secrets:
+The `Build Images` workflow uses `GITHUB_TOKEN` to publish images to GHCR:
 
-- `DEPLOY_HOST`: server hostname or IP.
-- `DEPLOY_PORT`: SSH port, usually `22`.
-- `DEPLOY_USER`: SSH user.
-- `DEPLOY_SSH_KEY`: private key for the SSH user.
-- `DEPLOY_PATH`: deployment directory, for example `/opt/lalalandshow`.
+- `ghcr.io/chenm0m/lalalandshow/backend:<tag>`
+- `ghcr.io/chenm0m/lalalandshow/frontend:<tag>`
 
-The workflow uses `GITHUB_TOKEN` to publish images to GHCR. If GHCR packages are
-private, make sure the server can pull them. The simplest option is to run this
-once on the server:
+If GHCR packages are private, make sure the server can pull them. The simplest
+option is to run this once on the server:
 
 ```bash
 docker login ghcr.io
@@ -51,15 +46,35 @@ Normal flow:
 ```text
 push to main
   -> CI tests backend and builds frontend
-  -> deployment workflow builds images
+  -> Build Images workflow builds images
   -> images are pushed to GHCR
-  -> server pulls the new image tag
-  -> docker compose up -d
+  -> you manually pull and restart on the server
 ```
 
-Manual deployment is available from the `Build and Deploy` workflow. Leave
-`image_tag` empty to deploy the current commit SHA, or provide a tag for a
+Manual image publishing is available from the `Build Images` workflow. Leave
+`image_tag` empty to publish the current commit SHA, or provide a tag for a
 named release.
+
+On the server, set the image tag in `.release.env`:
+
+```bash
+cd /opt/lalalandshow
+cat > .release.env <<'EOF'
+BACKEND_IMAGE=ghcr.io/chenm0m/lalalandshow/backend
+FRONTEND_IMAGE=ghcr.io/chenm0m/lalalandshow/frontend
+IMAGE_TAG=latest
+EOF
+```
+
+Then pull and restart:
+
+```bash
+cd /opt/lalalandshow
+./remote-deploy.sh
+```
+
+For a specific commit or manual release tag, replace `IMAGE_TAG=latest` with
+that exact tag.
 
 ## Fast Local Deploy
 
@@ -81,8 +96,8 @@ Optional environment variables:
 - `FRONTEND_IMAGE`: local frontend image name.
 - `SSH_OPTS`: extra SSH options, for example `-i ~/.ssh/deploy_key`.
 
-This path is intentionally for fast debugging. The GitHub Actions path should
-remain the source of truth for production releases.
+This path is intentionally for fast debugging. For normal testing releases,
+prefer pulling the GHCR images with `./remote-deploy.sh`.
 
 ## Rollback
 
