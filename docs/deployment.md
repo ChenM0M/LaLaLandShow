@@ -1,9 +1,8 @@
 # Image Build and Manual Deployment
 
-This project deploys as three long-running services behind Docker Compose:
+This project deploys as one application image plus infrastructure services:
 
-- `frontend`: Nginx serving the Vite build and proxying `/api` to the backend.
-- `backend`: the Go API container.
+- `app`: one image containing the Vite frontend, Nginx, and the Go backend.
 - `postgres` and `redis`: stateful infrastructure with named Docker volumes.
 
 ## Production Server Setup
@@ -16,19 +15,18 @@ This project deploys as three long-running services behind Docker Compose:
 Copy these files to the server deployment directory:
 
 - `docker-compose.prod.yml`
-- `nginx.conf`
 - `.env.prod.example`
 - `remote-deploy.sh`
+- `backup.sh`
 
 Do not store production secrets in GitHub source files. Keep them in the
 server-side `.env` file.
 
 ## GitHub Images
 
-The `Build Images` workflow uses `GITHUB_TOKEN` to publish images to GHCR:
+The `Build Images` workflow uses `GITHUB_TOKEN` to publish one GHCR image:
 
-- `ghcr.io/chenm0m/lalalandshow/backend:<tag>`
-- `ghcr.io/chenm0m/lalalandshow/frontend:<tag>`
+- `ghcr.io/chenm0m/lalalandshow/app:<tag>`
 
 If GHCR packages are private, make sure the server can pull them. The simplest
 option is to run this once on the server:
@@ -60,8 +58,7 @@ On the server, set the image tag in `.release.env`:
 ```bash
 cd /opt/lalalandshow
 cat > .release.env <<'EOF'
-BACKEND_IMAGE=ghcr.io/chenm0m/lalalandshow/backend
-FRONTEND_IMAGE=ghcr.io/chenm0m/lalalandshow/frontend
+APP_IMAGE=ghcr.io/chenm0m/lalalandshow/app
 IMAGE_TAG=latest
 EOF
 ```
@@ -92,8 +89,7 @@ Optional environment variables:
 
 - `DEPLOY_PORT`: SSH port, defaults to `22`.
 - `IMAGE_TAG`: image tag, defaults to `local-<git-sha>`.
-- `BACKEND_IMAGE`: local backend image name.
-- `FRONTEND_IMAGE`: local frontend image name.
+- `APP_IMAGE`: local app image name.
 - `SSH_OPTS`: extra SSH options, for example `-i ~/.ssh/deploy_key`.
 
 This path is intentionally for fast debugging. For normal testing releases,

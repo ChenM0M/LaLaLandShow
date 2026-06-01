@@ -11,7 +11,7 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 if [ ! -f "$RELEASE_ENV_FILE" ]; then
-  echo "Missing $RELEASE_ENV_FILE. It should contain BACKEND_IMAGE, FRONTEND_IMAGE, and IMAGE_TAG." >&2
+  echo "Missing $RELEASE_ENV_FILE. It should contain APP_IMAGE and IMAGE_TAG." >&2
   exit 1
 fi
 
