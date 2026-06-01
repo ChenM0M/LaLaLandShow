@@ -4,7 +4,7 @@ import "testing"
 
 func TestDefaultLayoutCounts(t *testing.T) {
 	layout := DefaultLayout()
-	if got, want := len(layout), 385; got != want {
+	if got, want := len(layout), 378; got != want {
 		t.Fatalf("len(DefaultLayout()) = %d, want %d", got, want)
 	}
 

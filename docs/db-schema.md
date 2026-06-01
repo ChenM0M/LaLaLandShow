@@ -10,9 +10,10 @@ Core correctness constraints:
 - `students.student_id` must match seven digits.
 - Students can exist in a semi-registered state with only `student_id`; `class_code` and `seat_no_in_class` are written together when registration is completed.
 - Seat snapshots derive public seat state from PostgreSQL: blocked seats are `locked`, unbooked seats are `free`, the authenticated student's own booking is `mine`, and other student/admin occupied seats are `others`.
-- Student booking writes run in one PostgreSQL transaction. The service pre-locks requested seat rows, inserts semi-registered companion students when needed, inserts all requested `seat_bookings` with `ON CONFLICT DO NOTHING`, and rolls back the whole batch unless every requested binding is inserted.
+- Student booking writes run in one PostgreSQL transaction. The service requires the authenticated actor to have a completed profile, creates missing proxy target students as semi-registered rows, rejects a new batch when the authenticated actor already has an own booking or any actor-managed proxy booking, pre-locks requested seat rows, inserts all requested `seat_bookings` with `ON CONFLICT DO NOTHING`, and rolls back the whole batch unless every requested binding is inserted.
 - Successful student bookings write `audit_logs.action = 'book'` with `actor_type = 'student'`.
-- Student release deletes the authenticated student's own `seat_bookings` row in one transaction and writes `audit_logs.action = 'release'`.
+- Student release deletes the authenticated student's own `seat_bookings` row plus every row where `booked_by_student_id` is that student in one transaction, writes `audit_logs.action = 'release'` for each released row, and returns the full released set to the API layer.
+- Student rebook performs the managed-group release and the new booking insert in one PostgreSQL transaction, so "重选全部" does not leave the student without seats if the new request conflicts.
 - Student change locks the target seat and current booking in one transaction, moves the booking to the target seat, increments `ticket_version`, and writes `audit_logs.action = 'change_seat'`.
 - `system_config.value_json` contains RFC3339 string values for `booking_open_at`, `booking_lock_at`, and `show_start_at`.
 - Migration `0002_system_config_defaults` seeds a local/demo window where booking is open, lock is 30 days in the future, and show start is 31 days in the future. Later admin configuration may overwrite these values.

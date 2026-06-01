@@ -24,6 +24,7 @@ func NewHandler(service *Service, authManager auth.Manager) *Handler {
 func (h *Handler) RegisterRoutes(app *fiber.App) {
 	group := app.Group("/api/ticket", h.auth.Middleware())
 	group.Get("/me", h.me)
+	group.Get("/mine", h.mine)
 	group.Get("/me/image", h.image)
 }
 
@@ -34,6 +35,19 @@ func (h *Handler) me(c fiber.Ctx) error {
 	}
 
 	result, err := h.service.Get(c.Context(), studentID)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return c.JSON(result)
+}
+
+func (h *Handler) mine(c fiber.Ctx) error {
+	studentID, ok := auth.StudentID(c)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing authenticated student"})
+	}
+
+	result, err := h.service.List(c.Context(), studentID)
 	if err != nil {
 		return writeError(c, err)
 	}
@@ -63,6 +77,8 @@ func writeError(c fiber.Ctx, err error) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": ErrTicketNotFound.Error()})
 	case errors.Is(err, ErrTicketNotAvailable):
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": ErrTicketNotAvailable.Error()})
+	case errors.Is(err, student.ErrIncompleteProfile):
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": student.ErrIncompleteProfile.Error()})
 	default:
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}

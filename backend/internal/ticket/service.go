@@ -27,6 +27,7 @@ var (
 
 type Store interface {
 	GetTicketRecord(ctx context.Context, studentID string) (Record, error)
+	ListTicketRecords(ctx context.Context, studentID string) ([]Record, error)
 	GetConfigTime(ctx context.Context, key string) (time.Time, bool, error)
 	GetConfigString(ctx context.Context, key string) (string, bool, error)
 }
@@ -66,16 +67,22 @@ type TicketSeat struct {
 }
 
 type Ticket struct {
-	PlayName      string     `json:"play_name"`
-	Venue         string     `json:"venue"`
-	ShowStartAt   *time.Time `json:"show_start_at,omitempty"`
-	IssuedAt      time.Time  `json:"issued_at"`
-	Holder        Holder     `json:"holder"`
-	Seat          TicketSeat `json:"seat"`
-	TicketVersion int        `json:"ticket_version"`
-	QRPayload     QRPayload  `json:"qr_payload"`
-	QRToken       string     `json:"qr_token"`
-	Notice        string     `json:"notice"`
+	PlayName          string     `json:"play_name"`
+	Venue             string     `json:"venue"`
+	ShowStartAt       *time.Time `json:"show_start_at,omitempty"`
+	IssuedAt          time.Time  `json:"issued_at"`
+	Holder            Holder     `json:"holder"`
+	Seat              TicketSeat `json:"seat"`
+	TicketVersion     int        `json:"ticket_version"`
+	QRPayload         *QRPayload `json:"qr_payload,omitempty"`
+	QRToken           string     `json:"qr_token,omitempty"`
+	Notice            string     `json:"notice"`
+	BookedByStudentID *string    `json:"booked_by_student_id,omitempty"`
+	OwnedByViewer     bool       `json:"owned_by_viewer"`
+}
+
+type TicketList struct {
+	Tickets []Ticket `json:"tickets"`
 }
 
 func NewService(store Store, secret string) *Service {
@@ -101,10 +108,53 @@ func (s *Service) Get(ctx context.Context, studentID string) (Ticket, error) {
 	}
 
 	issuedAt := s.now().UTC()
-	payload := newQRPayload(record.StudentID, record.SeatID, record.TicketVersion, issuedAt)
-	token, err := SignQR(payload, s.secret)
+	return s.ticketFromRecord(ctx, record, issuedAt, studentID, true)
+}
+
+func (s *Service) List(ctx context.Context, studentID string) (TicketList, error) {
+	studentID = strings.TrimSpace(studentID)
+	if !student.IsValidStudentID(studentID) {
+		return TicketList{}, student.ErrInvalidStudentID
+	}
+	if err := s.ensureAvailable(ctx); err != nil {
+		return TicketList{}, err
+	}
+
+	records, err := s.store.ListTicketRecords(ctx, studentID)
 	if err != nil {
-		return Ticket{}, err
+		return TicketList{}, err
+	}
+	if len(records) == 0 {
+		return TicketList{}, ErrTicketNotFound
+	}
+
+	issuedAt := s.now().UTC()
+	tickets := make([]Ticket, 0, len(records))
+	for _, record := range records {
+		ticket, err := s.ticketFromRecord(ctx, record, issuedAt, studentID, record.StudentID == studentID)
+		if err != nil {
+			return TicketList{}, err
+		}
+		tickets = append(tickets, ticket)
+	}
+	return TicketList{Tickets: tickets}, nil
+}
+
+func (s *Service) ticketFromRecord(ctx context.Context, record Record, issuedAt time.Time, viewerID string, includeQR bool) (Ticket, error) {
+	if includeQR && !recordHasCompleteProfile(record) {
+		return Ticket{}, student.ErrIncompleteProfile
+	}
+
+	var payload *QRPayload
+	var token string
+	if includeQR {
+		value := newQRPayload(record.StudentID, record.SeatID, record.TicketVersion, issuedAt)
+		signed, err := SignQR(value, s.secret)
+		if err != nil {
+			return Ticket{}, err
+		}
+		payload = &value
+		token = signed
 	}
 
 	playName := "La La Land Graduation Play"
@@ -145,11 +195,20 @@ func (s *Service) Get(ctx context.Context, studentID string) (Ticket, error) {
 			RowNo:  record.RowNo,
 			ColNo:  record.ColNo,
 		},
-		TicketVersion: record.TicketVersion,
-		QRPayload:     payload,
-		QRToken:       token,
-		Notice:        "Ticket admits the named holder only.",
+		TicketVersion:     record.TicketVersion,
+		QRPayload:         payload,
+		QRToken:           token,
+		Notice:            "Ticket admits the named holder only.",
+		BookedByStudentID: record.BookingOwnerID,
+		OwnedByViewer:     record.StudentID == viewerID,
 	}, nil
+}
+
+func recordHasCompleteProfile(record Record) bool {
+	return record.ClassCode != nil &&
+		strings.TrimSpace(*record.ClassCode) != "" &&
+		record.SeatNoInClass != nil &&
+		*record.SeatNoInClass > 0
 }
 
 func (s *Service) Image(ctx context.Context, studentID string) ([]byte, error) {

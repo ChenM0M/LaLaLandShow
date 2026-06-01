@@ -79,6 +79,74 @@ WHERE b.student_id = $1`, studentID)
 	return record, nil
 }
 
+func (s *PostgresStore) ListTicketRecords(ctx context.Context, studentID string) ([]Record, error) {
+	rows, err := s.db.Query(ctx, `
+SELECT st.student_id,
+       st.class_code,
+       st.seat_no_in_class,
+       st.display_name,
+       b.seat_id,
+       se.zone,
+       se.row_no,
+       se.col_no,
+       b.ticket_version,
+       b.booked_at,
+       b.booked_by_student_id
+FROM seat_bookings b
+JOIN students st ON st.student_id = b.student_id
+JOIN seats se ON se.seat_id = b.seat_id
+WHERE b.student_id = $1 OR b.booked_by_student_id = $1
+ORDER BY CASE WHEN b.student_id = $1 THEN 0 ELSE 1 END, b.booked_at, b.seat_id`, studentID)
+	if err != nil {
+		return nil, fmt.Errorf("list ticket records: %w", err)
+	}
+	defer rows.Close()
+
+	records := make([]Record, 0)
+	for rows.Next() {
+		var (
+			record         Record
+			classCode      sql.NullString
+			seatNoInClass  sql.NullInt64
+			displayName    sql.NullString
+			bookingOwnerID sql.NullString
+		)
+		if err := rows.Scan(
+			&record.StudentID,
+			&classCode,
+			&seatNoInClass,
+			&displayName,
+			&record.SeatID,
+			&record.Zone,
+			&record.RowNo,
+			&record.ColNo,
+			&record.TicketVersion,
+			&record.BookedAt,
+			&bookingOwnerID,
+		); err != nil {
+			return nil, fmt.Errorf("scan ticket record: %w", err)
+		}
+		if classCode.Valid {
+			record.ClassCode = &classCode.String
+		}
+		if seatNoInClass.Valid {
+			value := int(seatNoInClass.Int64)
+			record.SeatNoInClass = &value
+		}
+		if displayName.Valid {
+			record.DisplayName = &displayName.String
+		}
+		if bookingOwnerID.Valid {
+			record.BookingOwnerID = &bookingOwnerID.String
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate ticket records: %w", err)
+	}
+	return records, nil
+}
+
 func (s *PostgresStore) GetConfigTime(ctx context.Context, key string) (time.Time, bool, error) {
 	raw, ok, err := s.getConfig(ctx, key)
 	if err != nil || !ok {

@@ -117,7 +117,7 @@ func (m Manager) ParseStaffToken(token string, now time.Time, allowedRoles ...st
 
 func (m Manager) Middleware() fiber.Handler {
 	return func(c fiber.Ctx) error {
-		token, err := bearerToken(c.Get(fiber.HeaderAuthorization))
+		token, err := requestBearerToken(c)
 		if err != nil {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
 		}
@@ -185,6 +185,21 @@ func bearerToken(header string) (string, error) {
 		return "", ErrMissingToken
 	}
 	return token, nil
+}
+
+func requestBearerToken(c fiber.Ctx) (string, error) {
+	token, err := bearerToken(c.Get(fiber.HeaderAuthorization))
+	if err == nil {
+		return token, nil
+	}
+	if !errors.Is(err, ErrMissingToken) || c.Method() != fiber.MethodGet || c.Path() != "/api/seats/stream" {
+		return "", err
+	}
+	queryToken := strings.TrimSpace(c.Query("token"))
+	if queryToken == "" {
+		return "", ErrMissingToken
+	}
+	return queryToken, nil
 }
 
 func (m Manager) parse(token string, now time.Time) (Claims, error) {

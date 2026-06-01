@@ -9,6 +9,7 @@ Generated: 2026-05-29
   - `health`: concurrent `GET /healthz` checks.
   - `booking`: synthetic student login plus `POST /api/seats/book` attempts against currently free seats.
 - Booking mode can export a B10 snapshot before the run and restore it afterward with `-restore-after=true`.
+- Booking mode now follows the actor side of the real flow: synthetic student login, actor registration profile completion, then booking. Proxy targets may still be created as semi-registered rows by the booking transaction.
 
 ## Local Smoke Results
 
@@ -61,8 +62,16 @@ cd backend
 go run ./cmd/loadtest \
   -mode booking \
   -requests 1200 \
-  -concurrency 120 \
+  -concurrency 80 \
   -restore-after=true
+```
+
+For the current 2 vCPU / 2 GB production server, ramp gradually:
+
+```bash
+go run ./cmd/loadtest -mode booking -requests 600 -concurrency 40 -restore-after=true
+go run ./cmd/loadtest -mode booking -requests 900 -concurrency 60 -restore-after=true
+go run ./cmd/loadtest -mode booking -requests 1200 -concurrency 80 -restore-after=true
 ```
 
 Before full rush testing, raise or disable API rate limits for the test window so the result measures booking capacity rather than limiter behavior:

@@ -13,6 +13,7 @@ const (
 	StateFree   = "free"
 	StateLocked = "locked"
 	StateMine   = "mine"
+	StateProxy  = "proxy"
 	StateOthers = "others"
 )
 
@@ -22,12 +23,14 @@ type Snapshot struct {
 }
 
 type SnapshotSeat struct {
-	SeatID    int64  `json:"seat_id"`
-	Zone      string `json:"zone"`
-	RowNo     int    `json:"row_no"`
-	ColNo     int    `json:"col_no"`
-	IsBlocked bool   `json:"is_blocked"`
-	State     string `json:"state"`
+	SeatID            int64   `json:"seat_id"`
+	Zone              string  `json:"zone"`
+	RowNo             int     `json:"row_no"`
+	ColNo             int     `json:"col_no"`
+	IsBlocked         bool    `json:"is_blocked"`
+	State             string  `json:"state"`
+	StudentID         *string `json:"student_id,omitempty"`
+	BookedByStudentID *string `json:"booked_by_student_id,omitempty"`
 }
 
 type SnapshotStore interface {
@@ -50,6 +53,7 @@ SELECT s.seat_id,
        s.col_no,
        s.is_blocked,
        b.student_id,
+       b.booked_by_student_id,
        b.custom_label
 FROM seats s
 LEFT JOIN seat_bookings b ON b.seat_id = s.seat_id
@@ -75,6 +79,7 @@ ORDER BY
 		var (
 			seat             SnapshotSeat
 			bookingStudentID sql.NullString
+			bookedByStudentID sql.NullString
 			customLabel      sql.NullString
 		)
 		if err := rows.Scan(
@@ -84,11 +89,16 @@ ORDER BY
 			&seat.ColNo,
 			&seat.IsBlocked,
 			&bookingStudentID,
+			&bookedByStudentID,
 			&customLabel,
 		); err != nil {
 			return Snapshot{}, fmt.Errorf("scan seat snapshot: %w", err)
 		}
-		seat.State = classifySnapshotSeat(seat.IsBlocked, bookingStudentID, customLabel, studentID)
+		seat.State = classifySnapshotSeat(seat.IsBlocked, bookingStudentID, bookedByStudentID, customLabel, studentID)
+		if seat.State == StateMine || seat.State == StateProxy {
+			seat.StudentID = nullableStringPtr(bookingStudentID)
+			seat.BookedByStudentID = nullableStringPtr(bookedByStudentID)
+		}
 		snapshot.Seats = append(snapshot.Seats, seat)
 	}
 	if err := rows.Err(); err != nil {
@@ -97,7 +107,7 @@ ORDER BY
 	return snapshot, nil
 }
 
-func classifySnapshotSeat(isBlocked bool, bookingStudentID, customLabel sql.NullString, currentStudentID string) string {
+func classifySnapshotSeat(isBlocked bool, bookingStudentID, bookedByStudentID, customLabel sql.NullString, currentStudentID string) string {
 	if isBlocked {
 		return StateLocked
 	}
@@ -105,10 +115,21 @@ func classifySnapshotSeat(isBlocked bool, bookingStudentID, customLabel sql.Null
 		if bookingStudentID.String == currentStudentID {
 			return StateMine
 		}
+		if bookedByStudentID.Valid && bookedByStudentID.String == currentStudentID {
+			return StateProxy
+		}
 		return StateOthers
 	}
 	if customLabel.Valid {
 		return StateOthers
 	}
 	return StateFree
+}
+
+func nullableStringPtr(value sql.NullString) *string {
+	if !value.Valid {
+		return nil
+	}
+	out := value.String
+	return &out
 }

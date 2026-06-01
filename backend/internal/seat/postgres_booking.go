@@ -35,11 +35,12 @@ func (s *PostgresSnapshotStore) BookSeats(ctx context.Context, actorStudentID st
 		ordinals = append(ordinals, int32(i))
 	}
 
-	if _, err := tx.Exec(ctx, `
-INSERT INTO students (student_id)
-SELECT unnest($1::varchar[])
-ON CONFLICT (student_id) DO NOTHING`, studentIDs); err != nil {
-		return nil, fmt.Errorf("ensure booking students: %w", err)
+	if err := ensureBookableStudentRows(ctx, tx, actorStudentID, studentIDs); err != nil {
+		return nil, err
+	}
+
+	if err := ensureNoExistingActorManagedBookings(ctx, tx, actorStudentID); err != nil {
+		return nil, err
 	}
 
 	if err := lockRequestedSeats(ctx, tx, seatIDs, len(entries)); err != nil {
@@ -62,31 +63,89 @@ ON CONFLICT (student_id) DO NOTHING`, studentIDs); err != nil {
 	return bookings, nil
 }
 
-func (s *PostgresSnapshotStore) ReleaseSeat(ctx context.Context, actorStudentID string) (BookedSeat, error) {
+func (s *PostgresSnapshotStore) ReleaseSeats(ctx context.Context, actorStudentID string) ([]BookedSeat, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return BookedSeat{}, fmt.Errorf("begin release transaction: %w", err)
+		return nil, fmt.Errorf("begin release transaction: %w", err)
 	}
 	defer func() {
 		_ = tx.Rollback(ctx)
 	}()
 
 	if err := ensureReleaseAllowed(ctx, tx, time.Now()); err != nil {
-		return BookedSeat{}, err
+		return nil, err
 	}
 
-	released, err := deleteStudentBooking(ctx, tx, actorStudentID)
+	released, err := deleteManagedBookings(ctx, tx, actorStudentID)
 	if err != nil {
-		return BookedSeat{}, err
+		return nil, err
 	}
-	if err := writeReleaseAudit(ctx, tx, actorStudentID, released); err != nil {
-		return BookedSeat{}, err
+	for _, booking := range released {
+		if err := writeReleaseAudit(ctx, tx, actorStudentID, booking); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return BookedSeat{}, fmt.Errorf("commit release transaction: %w", err)
+		return nil, fmt.Errorf("commit release transaction: %w", err)
 	}
 	return released, nil
+}
+
+func (s *PostgresSnapshotStore) RebookSeats(ctx context.Context, actorStudentID string, entries []BookEntry) (RebookResult, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return RebookResult{}, fmt.Errorf("begin rebook transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	if err := ensureBookingAllowed(ctx, tx, time.Now()); err != nil {
+		return RebookResult{}, err
+	}
+
+	seatIDs := make([]int64, 0, len(entries))
+	studentIDs := make([]string, 0, len(entries))
+	ordinals := make([]int32, 0, len(entries))
+	for i, entry := range entries {
+		seatIDs = append(seatIDs, entry.SeatID)
+		studentIDs = append(studentIDs, entry.StudentID)
+		ordinals = append(ordinals, int32(i))
+	}
+
+	if err := ensureBookableStudentRows(ctx, tx, actorStudentID, studentIDs); err != nil {
+		return RebookResult{}, err
+	}
+
+	released, err := deleteManagedBookings(ctx, tx, actorStudentID)
+	if err != nil {
+		return RebookResult{}, err
+	}
+	for _, booking := range released {
+		if err := writeReleaseAudit(ctx, tx, actorStudentID, booking); err != nil {
+			return RebookResult{}, err
+		}
+	}
+
+	if err := lockRequestedSeats(ctx, tx, seatIDs, len(entries)); err != nil {
+		return RebookResult{}, err
+	}
+
+	bookings, err := insertSeatBookings(ctx, tx, actorStudentID, seatIDs, studentIDs, ordinals, len(entries))
+	if err != nil {
+		return RebookResult{}, err
+	}
+	for _, booking := range bookings {
+		if err := writeBookingAudit(ctx, tx, actorStudentID, booking); err != nil {
+			return RebookResult{}, err
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return RebookResult{}, fmt.Errorf("commit rebook transaction: %w", err)
+	}
+	return RebookResult{ReleasedBookings: released, Bookings: bookings}, nil
 }
 
 func (s *PostgresSnapshotStore) ChangeSeat(ctx context.Context, actorStudentID string, newSeatID int64) (SeatChange, error) {
@@ -99,6 +158,9 @@ func (s *PostgresSnapshotStore) ChangeSeat(ctx context.Context, actorStudentID s
 	}()
 
 	if err := ensureChangeAllowed(ctx, tx, time.Now()); err != nil {
+		return SeatChange{}, err
+	}
+	if err := ensureCompleteStudentProfiles(ctx, tx, []string{actorStudentID}, 1); err != nil {
 		return SeatChange{}, err
 	}
 	if err := lockRequestedSeats(ctx, tx, []int64{newSeatID}, 1); err != nil {
@@ -161,6 +223,67 @@ FOR UPDATE`, seatIDs)
 	}
 	if found != want {
 		return ErrSeatNotFound
+	}
+	return nil
+}
+
+func ensureCompleteStudentProfiles(ctx context.Context, tx pgx.Tx, studentIDs []string, want int) error {
+	var count int
+	if err := tx.QueryRow(ctx, `
+SELECT count(*)
+FROM students
+WHERE student_id = ANY($1)
+  AND class_code IS NOT NULL
+  AND btrim(class_code) <> ''
+  AND seat_no_in_class IS NOT NULL
+  AND seat_no_in_class > 0`, studentIDs).Scan(&count); err != nil {
+		return fmt.Errorf("check student registration: %w", err)
+	}
+	if count != want {
+		return ErrIncompleteRegistration
+	}
+	return nil
+}
+
+func ensureBookableStudentRows(ctx context.Context, tx pgx.Tx, actorStudentID string, studentIDs []string) error {
+	if _, err := tx.Exec(ctx, `
+INSERT INTO students (student_id)
+SELECT DISTINCT student_id
+FROM unnest($1::varchar[]) AS requested(student_id)
+ON CONFLICT (student_id) DO NOTHING`, studentIDs); err != nil {
+		return fmt.Errorf("ensure booking student rows: %w", err)
+	}
+
+	var actorReady bool
+	if err := tx.QueryRow(ctx, `
+SELECT class_code IS NOT NULL
+   AND btrim(class_code) <> ''
+   AND seat_no_in_class IS NOT NULL
+   AND seat_no_in_class > 0
+FROM students
+WHERE student_id = $1`, actorStudentID).Scan(&actorReady); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrIncompleteRegistration
+		}
+		return fmt.Errorf("check actor registration: %w", err)
+	}
+	if !actorReady {
+		return ErrIncompleteRegistration
+	}
+	return nil
+}
+
+func ensureNoExistingActorManagedBookings(ctx context.Context, tx pgx.Tx, actorStudentID string) error {
+	var count int
+	if err := tx.QueryRow(ctx, `
+SELECT count(*)
+FROM seat_bookings
+WHERE student_id = $1
+   OR booked_by_student_id = $1`, actorStudentID).Scan(&count); err != nil {
+		return fmt.Errorf("check existing actor bookings: %w", err)
+	}
+	if count > 0 {
+		return ErrBookingConflict
 	}
 	return nil
 }
@@ -232,27 +355,48 @@ ORDER BY r.ord`,
 	return bookings, nil
 }
 
-func deleteStudentBooking(ctx context.Context, tx pgx.Tx, actorStudentID string) (BookedSeat, error) {
-	row := tx.QueryRow(ctx, `
-DELETE FROM seat_bookings b
-USING seats s
-WHERE b.student_id = $1
-  AND s.seat_id = b.seat_id
-RETURNING b.seat_id,
-          b.student_id,
-          s.zone,
-          s.row_no,
-          s.col_no,
-          b.ticket_version,
-          b.booked_at`, actorStudentID)
-	booking, err := scanBookedSeat(row)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return BookedSeat{}, ErrBookingNotFound
-	}
+func deleteManagedBookings(ctx context.Context, tx pgx.Tx, actorStudentID string) ([]BookedSeat, error) {
+	rows, err := tx.Query(ctx, `
+WITH deleted AS (
+  DELETE FROM seat_bookings b
+  WHERE b.student_id = $1
+     OR b.booked_by_student_id = $1
+  RETURNING b.seat_id,
+            b.student_id,
+            b.ticket_version,
+            b.booked_at,
+            CASE WHEN b.student_id = $1 THEN 0 ELSE 1 END AS release_order
+)
+SELECT d.seat_id,
+       d.student_id,
+       s.zone,
+       s.row_no,
+       s.col_no,
+       d.ticket_version,
+       d.booked_at
+FROM deleted d
+JOIN seats s ON s.seat_id = d.seat_id
+ORDER BY d.release_order, d.seat_id`, actorStudentID)
 	if err != nil {
-		return BookedSeat{}, fmt.Errorf("delete booking: %w", err)
+		return nil, fmt.Errorf("delete managed bookings: %w", err)
 	}
-	return booking, nil
+	defer rows.Close()
+
+	bookings := []BookedSeat{}
+	for rows.Next() {
+		booking, err := scanBookedSeat(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan released booking: %w", err)
+		}
+		bookings = append(bookings, booking)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate released bookings: %w", err)
+	}
+	if len(bookings) == 0 {
+		return nil, ErrBookingNotFound
+	}
+	return bookings, nil
 }
 
 func getStudentBookingForUpdate(ctx context.Context, tx pgx.Tx, actorStudentID string) (BookedSeat, error) {

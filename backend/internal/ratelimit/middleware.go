@@ -25,7 +25,7 @@ func New(cfg config.RateLimitConfig, redisClient *redis.Client) fiber.Handler {
 			return path == "/healthz" || path == "/api/seats/stream"
 		},
 		MaxFunc: func(c fiber.Ctx) int {
-			if c.Path() == "/api/seats/book" {
+			if isBookingBurstPath(c.Path()) {
 				return cfg.BookingMax
 			}
 			return cfg.GenericMax
@@ -41,7 +41,16 @@ func New(cfg config.RateLimitConfig, redisClient *redis.Client) fiber.Handler {
 		limitConfig.Storage = NewRedisStorage(redisClient, "lalaland:rate:")
 	}
 	limitConfig.KeyGenerator = func(c fiber.Ctx) string {
-		return c.IP() + ":" + c.Method() + ":" + strconv.Itoa(limitConfig.MaxFunc(c))
+		return c.IP() + ":" + c.Method() + ":" + c.Path() + ":" + strconv.Itoa(limitConfig.MaxFunc(c))
 	}
 	return limiter.New(limitConfig)
+}
+
+func isBookingBurstPath(path string) bool {
+	switch path {
+	case "/api/seats/book", "/api/seats/rebook", "/api/seats/change":
+		return true
+	default:
+		return false
+	}
 }

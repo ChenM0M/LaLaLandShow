@@ -16,6 +16,7 @@ type Student struct {
 
 type Booking struct {
 	SeatID        int64     `json:"seat_id"`
+	StudentID     string    `json:"student_id"`
 	Zone          string    `json:"zone"`
 	RowNo         int       `json:"row_no"`
 	ColNo         int       `json:"col_no"`

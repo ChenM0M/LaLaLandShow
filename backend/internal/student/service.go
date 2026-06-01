@@ -10,9 +10,10 @@ import (
 )
 
 var (
-	ErrInvalidStudentID = errors.New("student_id must be exactly seven digits")
-	ErrInvalidProfile   = errors.New("class_code and seat_no_in_class are required")
-	ErrNotFound         = errors.New("student not found")
+	ErrInvalidStudentID  = errors.New("student_id must be exactly seven digits")
+	ErrInvalidProfile    = errors.New("class_code and seat_no_in_class are required")
+	ErrIncompleteProfile = errors.New("student registration is incomplete")
+	ErrNotFound          = errors.New("student not found")
 )
 
 var studentIDPattern = regexp.MustCompile(`^[0-9]{7}$`)
@@ -111,6 +112,13 @@ func ValidateProfile(input RegisterInput) error {
 		return ErrInvalidProfile
 	}
 	return nil
+}
+
+func HasCompleteProfile(student Student) bool {
+	return student.ClassCode != nil &&
+		strings.TrimSpace(*student.ClassCode) != "" &&
+		student.SeatNoInClass != nil &&
+		*student.SeatNoInClass > 0
 }
 
 func normalizeProfile(input RegisterInput) RegisterInput {

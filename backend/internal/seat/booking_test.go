@@ -9,12 +9,15 @@ import (
 
 type fakeBookingStore struct {
 	bookings       []BookedSeat
-	released       BookedSeat
+	released       []BookedSeat
+	rebook         RebookResult
 	change         SeatChange
 	err            error
+	rebookErr      error
 	releaseErr     error
 	changeErr      error
 	seen           []BookEntry
+	seenRebook     []BookEntry
 	seenReleaseFor string
 	seenChangeFor  string
 	seenNewSeatID  int64
@@ -32,10 +35,18 @@ func (s *fakeBookingStore) BookSeats(_ context.Context, _ string, entries []Book
 	return s.bookings, nil
 }
 
-func (s *fakeBookingStore) ReleaseSeat(_ context.Context, actorStudentID string) (BookedSeat, error) {
+func (s *fakeBookingStore) RebookSeats(_ context.Context, _ string, entries []BookEntry) (RebookResult, error) {
+	s.seenRebook = append([]BookEntry(nil), entries...)
+	if s.rebookErr != nil {
+		return RebookResult{}, s.rebookErr
+	}
+	return s.rebook, nil
+}
+
+func (s *fakeBookingStore) ReleaseSeats(_ context.Context, actorStudentID string) ([]BookedSeat, error) {
 	s.seenReleaseFor = actorStudentID
 	if s.releaseErr != nil {
-		return BookedSeat{}, s.releaseErr
+		return nil, s.releaseErr
 	}
 	return s.released, nil
 }
@@ -145,14 +156,25 @@ func TestServiceReleaseValidatesStudentID(t *testing.T) {
 
 func TestServiceReleaseStoresNormalizedStudentID(t *testing.T) {
 	store := &fakeBookingStore{
-		released: BookedSeat{
-			SeatID:        7,
-			StudentID:     "1234567",
-			Zone:          "middle",
-			RowNo:         1,
-			ColNo:         1,
-			TicketVersion: 1,
-			BookedAt:      time.Now(),
+		released: []BookedSeat{
+			{
+				SeatID:        7,
+				StudentID:     "1234567",
+				Zone:          "middle",
+				RowNo:         1,
+				ColNo:         1,
+				TicketVersion: 1,
+				BookedAt:      time.Now(),
+			},
+			{
+				SeatID:        8,
+				StudentID:     "2234567",
+				Zone:          "middle",
+				RowNo:         1,
+				ColNo:         2,
+				TicketVersion: 1,
+				BookedAt:      time.Now(),
+			},
 		},
 	}
 	service := NewService(store)
@@ -164,8 +186,19 @@ func TestServiceReleaseStoresNormalizedStudentID(t *testing.T) {
 	if result.Released.SeatID != 7 {
 		t.Fatalf("released seat = %d, want 7", result.Released.SeatID)
 	}
+	if len(result.ReleasedBookings) != 2 || result.ReleasedBookings[0].SeatID != 7 || result.ReleasedBookings[1].SeatID != 8 {
+		t.Fatalf("released bookings = %#v, want own booking followed by proxy booking", result.ReleasedBookings)
+	}
 	if store.seenReleaseFor != "1234567" {
 		t.Fatalf("release student id = %q, want normalized id", store.seenReleaseFor)
+	}
+}
+
+func TestServiceReleaseRejectsEmptyStoreResult(t *testing.T) {
+	service := NewService(&fakeBookingStore{})
+
+	if _, err := service.Release(context.Background(), "1234567"); !errors.Is(err, ErrBookingNotFound) {
+		t.Fatalf("Release(empty) error = %v, want %v", err, ErrBookingNotFound)
 	}
 }
 

@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"lalalandshow/backend/internal/student"
 )
 
 const uniqueViolationCode = "23505"
@@ -124,11 +126,8 @@ func (s *PostgresStore) AssignSeat(ctx context.Context, input AssignSeatInput) (
 	version := 1
 	var movingBooking *currentBooking
 	if input.StudentID != "" {
-		if _, err := tx.Exec(ctx, `
-INSERT INTO students (student_id)
-VALUES ($1)
-ON CONFLICT (student_id) DO NOTHING`, input.StudentID); err != nil {
-			return SeatDetail{}, fmt.Errorf("ensure assigned student: %w", err)
+		if err := ensureAssignableStudentProfile(ctx, tx, input.StudentID); err != nil {
+			return SeatDetail{}, err
 		}
 
 		studentBooking, exists, err := getStudentBookingForUpdate(ctx, tx, input.StudentID)
@@ -180,6 +179,26 @@ ON CONFLICT (student_id) DO NOTHING`, input.StudentID); err != nil {
 		return SeatDetail{}, fmt.Errorf("commit admin assign: %w", err)
 	}
 	return s.GetSeat(ctx, input.SeatID)
+}
+
+func ensureAssignableStudentProfile(ctx context.Context, tx pgx.Tx, studentID string) error {
+	var exists bool
+	if err := tx.QueryRow(ctx, `
+SELECT EXISTS (
+  SELECT 1
+  FROM students
+  WHERE student_id = $1
+    AND class_code IS NOT NULL
+    AND btrim(class_code) <> ''
+    AND seat_no_in_class IS NOT NULL
+    AND seat_no_in_class > 0
+)`, studentID).Scan(&exists); err != nil {
+		return fmt.Errorf("check assigned student registration: %w", err)
+	}
+	if !exists {
+		return student.ErrIncompleteProfile
+	}
+	return nil
 }
 
 func (s *PostgresStore) LockSeat(ctx context.Context, input LockSeatInput) (SeatDetail, error) {
@@ -603,47 +622,61 @@ func (s *PostgresStore) ExportCSV(ctx context.Context, exportType string) (CSVEx
 }
 
 func (s *PostgresStore) ExportBackup(ctx context.Context, now time.Time) (BackupSnapshot, error) {
+	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel:   pgx.RepeatableRead,
+		AccessMode: pgx.ReadOnly,
+	})
+	if err != nil {
+		return BackupSnapshot{}, fmt.Errorf("begin backup transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
 	snapshot := BackupSnapshot{
 		FormatVersion: 1,
 		GeneratedAt:   now.UTC(),
 	}
 
-	configs, err := s.backupConfig(ctx)
+	configs, err := backupConfig(ctx, tx)
 	if err != nil {
 		return BackupSnapshot{}, err
 	}
 	snapshot.SystemConfig = configs
 
-	seats, err := s.backupSeats(ctx)
+	seats, err := backupSeats(ctx, tx)
 	if err != nil {
 		return BackupSnapshot{}, err
 	}
 	snapshot.Seats = seats
 
-	students, err := s.backupStudents(ctx)
+	students, err := backupStudents(ctx, tx)
 	if err != nil {
 		return BackupSnapshot{}, err
 	}
 	snapshot.Students = students
 
-	bookings, err := s.backupSeatBookings(ctx)
+	bookings, err := backupSeatBookings(ctx, tx)
 	if err != nil {
 		return BackupSnapshot{}, err
 	}
 	snapshot.SeatBookings = bookings
 
-	checkins, err := s.backupCheckinEvents(ctx)
+	checkins, err := backupCheckinEvents(ctx, tx)
 	if err != nil {
 		return BackupSnapshot{}, err
 	}
 	snapshot.CheckinEvents = checkins
 
-	audit, err := s.backupAuditLogs(ctx)
+	audit, err := backupAuditLogs(ctx, tx)
 	if err != nil {
 		return BackupSnapshot{}, err
 	}
 	snapshot.AuditLogs = audit
 	snapshot.Summary = backupSummary(snapshot)
+	if err := tx.Commit(ctx); err != nil {
+		return BackupSnapshot{}, fmt.Errorf("commit backup transaction: %w", err)
+	}
 	return snapshot, nil
 }
 
@@ -762,6 +795,10 @@ LEFT JOIN students st ON st.student_id = b.student_id
 
 type rowScanner interface {
 	Scan(dest ...any) error
+}
+
+type queryer interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
 func scanSeatDetail(row rowScanner) (SeatDetail, error) {
@@ -1143,8 +1180,8 @@ ORDER BY scanned_at DESC, id DESC`)
 	return export, rows.Err()
 }
 
-func (s *PostgresStore) backupConfig(ctx context.Context) ([]BackupConfig, error) {
-	rows, err := s.db.Query(ctx, `
+func backupConfig(ctx context.Context, db queryer) ([]BackupConfig, error) {
+	rows, err := db.Query(ctx, `
 SELECT key, value_json, updated_by, updated_at
 FROM system_config
 ORDER BY key`)
@@ -1168,8 +1205,8 @@ ORDER BY key`)
 	return out, rows.Err()
 }
 
-func (s *PostgresStore) backupSeats(ctx context.Context) ([]BackupSeat, error) {
-	rows, err := s.db.Query(ctx, `
+func backupSeats(ctx context.Context, db queryer) ([]BackupSeat, error) {
+	rows, err := db.Query(ctx, `
 SELECT seat_id, zone, row_no, col_no, is_blocked, block_reason, created_at, updated_at
 FROM seats
 ORDER BY seat_id`)
@@ -1191,8 +1228,8 @@ ORDER BY seat_id`)
 	return out, rows.Err()
 }
 
-func (s *PostgresStore) backupStudents(ctx context.Context) ([]BackupStudent, error) {
-	rows, err := s.db.Query(ctx, `
+func backupStudents(ctx context.Context, db queryer) ([]BackupStudent, error) {
+	rows, err := db.Query(ctx, `
 SELECT student_id, class_code, seat_no_in_class, display_name, pending_notice, created_at, updated_at
 FROM students
 ORDER BY student_id`)
@@ -1219,8 +1256,8 @@ ORDER BY student_id`)
 	return out, rows.Err()
 }
 
-func (s *PostgresStore) backupSeatBookings(ctx context.Context) ([]BackupSeatBooking, error) {
-	rows, err := s.db.Query(ctx, `
+func backupSeatBookings(ctx context.Context, db queryer) ([]BackupSeatBooking, error) {
+	rows, err := db.Query(ctx, `
 SELECT seat_id, student_id, custom_label, booked_by_student_id, booked_at, ticket_version
 FROM seat_bookings
 ORDER BY seat_id`)
@@ -1244,8 +1281,8 @@ ORDER BY seat_id`)
 	return out, rows.Err()
 }
 
-func (s *PostgresStore) backupCheckinEvents(ctx context.Context) ([]BackupCheckinEvent, error) {
-	rows, err := s.db.Query(ctx, `
+func backupCheckinEvents(ctx context.Context, db queryer) ([]BackupCheckinEvent, error) {
+	rows, err := db.Query(ctx, `
 SELECT id, student_id, seat_id, ticket_version, method, result, is_first_scan, scanner_account, ip_addr::text, scanned_at
 FROM checkin_events
 ORDER BY id`)
@@ -1272,8 +1309,8 @@ ORDER BY id`)
 	return out, rows.Err()
 }
 
-func (s *PostgresStore) backupAuditLogs(ctx context.Context) ([]BackupAuditLog, error) {
-	rows, err := s.db.Query(ctx, `
+func backupAuditLogs(ctx context.Context, db queryer) ([]BackupAuditLog, error) {
+	rows, err := db.Query(ctx, `
 SELECT id, actor_type, actor_id, action, target_seat_id, target_student, before_json, after_json, ip_addr::text, created_at
 FROM audit_logs
 ORDER BY id`)

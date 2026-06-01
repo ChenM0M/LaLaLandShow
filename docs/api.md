@@ -27,7 +27,8 @@ Student identity endpoints:
   - Response: `{ "student": { ... } }`.
 - `GET /api/seats/snapshot`
   - Student bearer token required.
-  - Returns all 385 seats with `state` values: `free`, `locked`, `mine`, or `others`.
+  - Returns all 377 seats with `state` values: `free`, `locked`, `mine`, `proxy`, or `others`.
+  - `mine` is the authenticated student's own seat. `proxy` is a seat booked for another student by the authenticated student and includes `student_id` plus `booked_by_student_id`.
 - `GET /api/seats/stream`
   - Student bearer token required.
   - Server-Sent Events stream.
@@ -38,15 +39,24 @@ Student identity endpoints:
   - Request: `[{"seat_id": 101, "student_id": "1234567"}]`.
   - Also accepts `{ "bookings": [...] }` for clients that prefer an envelope.
   - The request must contain 1 to 3 unique seats, 1 to 3 unique seven-digit student IDs, and must include the authenticated student.
-  - Creates semi-registered companion student rows when needed.
+  - The authenticated student can manage only one active booking group at a time. A new request is rejected if the authenticated student already has an own booking or any proxy booking created by them.
+  - The authenticated student must have a completed registration profile. Proxy-booked students may be unregistered or semi-registered; missing proxy student rows are created as semi-registered records so the seat can be held first.
   - Response: `{ "bookings": [{ "seat_id": 101, "student_id": "1234567", "zone": "middle", "row_no": 1, "col_no": 1, "ticket_version": 1, "booked_at": "..." }] }`.
   - Returns `409` before `booking_open_at`, after `booking_lock_at`, after `show_start_at`, when any requested seat is locked, or when any requested seat/student is already booked; the whole batch is rolled back.
 - `POST /api/seats/release`
   - Student bearer token required.
-  - Releases the authenticated student's own booking.
-  - Response: `{ "released": { "seat_id": 101, "student_id": "1234567", "zone": "middle", "row_no": 1, "col_no": 1, "ticket_version": 1, "booked_at": "..." } }`.
-  - Returns `404` when the student has no booking.
+  - Releases the authenticated student's own booking and every proxy booking created by the authenticated student in the same transaction.
+  - Response: `{ "released": { ... }, "released_bookings": [{ "seat_id": 101, "student_id": "1234567", "zone": "middle", "row_no": 1, "col_no": 1, "ticket_version": 1, "booked_at": "..." }] }`.
+  - `released` is kept for older clients and points to the first released booking; `released_bookings` contains the full set.
+  - Returns `404` when the student has no own booking and no proxy booking created by them.
   - Returns `409` after `show_start_at`.
+- `POST /api/seats/rebook`
+  - Student bearer token required.
+  - Request shape matches `POST /api/seats/book`.
+  - Atomically releases the authenticated student's current managed booking group and creates the newly selected group in one transaction.
+  - Use this for "重选全部" when the student wants to replace both the本人座位 and any proxy-booked seats.
+  - Response: `{ "released_bookings": [...], "bookings": [...] }`.
+  - Returns `409` before `booking_open_at`, after `booking_lock_at`, after `show_start_at`, when any requested seat is locked, or when any requested seat/student is already booked.
 - `POST /api/seats/change`
   - Student bearer token required.
   - Request: `{ "seat_id": 102 }`.
@@ -61,6 +71,11 @@ Student identity endpoints:
   - Returns ticket JSON with play metadata, holder info, seat info, `ticket_version`, canonical QR payload, and signed `qr_token`.
   - The QR token signs `{ "student_id", "seat_id", "ticket_version", "issued_at" }` with HMAC-SHA256 using `HMAC_SECRET`.
   - Returns `404` when the student has no booking and `409` before tickets are available.
+- `GET /api/ticket/mine`
+  - Student bearer token required.
+  - Available after `booking_lock_at`.
+  - Returns the student's own ticket plus proxy-booked seats created by that student.
+  - QR payloads are included only for tickets owned by the authenticated student and only after the ticket holder has completed registration. Proxy-booked seats are visible to the booker as seat information even when the target student has not completed registration, but their QR tokens remain available only when the target student logs in after completing registration.
 - `GET /api/ticket/me/image`
   - Student bearer token required.
   - Available after `booking_lock_at`.
@@ -87,7 +102,7 @@ Student identity endpoints:
   - Writes `checkin_events` with `result = "approved"` and computes `is_first_scan`; repeated scans are accepted but return `is_first_scan: false`.
 - `GET /api/checker/stats`
   - Checker or admin bearer token required.
-  - Response: `{ "checked_in": 120, "total": 385, "last_minute_rate": 8 }`.
+  - Response: `{ "checked_in": 120, "total": 377, "last_minute_rate": 8 }`.
 - `GET /api/checker/export-roster.csv`
   - Checker or admin bearer token required.
   - Downloads a CSV roster with booking, seat, check-in count, and first/last scan timestamps.

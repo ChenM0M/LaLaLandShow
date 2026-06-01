@@ -9,10 +9,10 @@ type Definition struct {
 }
 
 func DefaultLayout() []Definition {
-	defs := make([]Definition, 0, 385)
-	defs = appendZone(defs, "left", []int{8, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7})
-	defs = appendZone(defs, "middle", repeat(25, 8))
-	defs = appendZone(defs, "right", []int{7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 2})
+	defs := make([]Definition, 0, 378)
+	defs = appendZone(defs, "left", repeat(21, 4))
+	defs = appendZone(defs, "middle", repeat(21, 10))
+	defs = appendZone(defs, "right", repeat(21, 4))
 
 	for i := range defs {
 		if (defs[i].Zone == "middle" && defs[i].RowNo <= 2) ||

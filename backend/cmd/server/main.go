@@ -29,6 +29,9 @@ func main() {
 	ctx := context.Background()
 
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("invalid config: %v", err)
+	}
 
 	logger, err := zap.NewProduction()
 	if err != nil {
@@ -40,7 +43,16 @@ func main() {
 
 	var db *pgxpool.Pool
 	if cfg.DatabaseURL != "" {
-		db, err = pgxpool.New(ctx, cfg.DatabaseURL)
+		dbConfig, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+		if err != nil {
+			logger.Fatal("parse postgres config", zap.Error(err))
+		}
+		dbConfig.MaxConns = cfg.Database.MaxConns
+		dbConfig.MinConns = cfg.Database.MinConns
+		dbConfig.MaxConnLifetime = cfg.Database.MaxConnLifetime
+		dbConfig.MaxConnIdleTime = cfg.Database.MaxConnIdleTime
+
+		db, err = pgxpool.NewWithConfig(ctx, dbConfig)
 		if err != nil {
 			logger.Fatal("connect postgres", zap.Error(err))
 		}
@@ -91,6 +103,7 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	})
 	app.Use(recover.New())
+	app.Use(requestLogger(logger))
 	if cfg.RateLimit.Enabled {
 		app.Use(ratelimit.New(cfg.RateLimit, redisClient))
 	}
@@ -143,5 +156,31 @@ func main() {
 	defer cancel()
 	if err := app.ShutdownWithContext(shutdownCtx); err != nil {
 		logger.Error("shutdown", zap.Error(err))
+	}
+}
+
+func requestLogger(logger *zap.Logger) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		start := time.Now()
+		err := c.Next()
+		status := c.Response().StatusCode()
+		fields := []zap.Field{
+			zap.String("method", c.Method()),
+			zap.String("path", c.Path()),
+			zap.Int("status", status),
+			zap.Duration("latency", time.Since(start)),
+			zap.String("ip", c.IP()),
+		}
+		if err != nil {
+			fields = append(fields, zap.Error(err))
+			logger.Warn("http request failed", fields...)
+			return err
+		}
+		if status >= fiber.StatusInternalServerError {
+			logger.Error("http request completed", fields...)
+		} else {
+			logger.Info("http request completed", fields...)
+		}
+		return nil
 	}
 }

@@ -71,3 +71,62 @@ func TestMiddlewareSkipsHealthz(t *testing.T) {
 		}
 	}
 }
+
+func TestMiddlewareLimitsPerPath(t *testing.T) {
+	app := fiber.New()
+	app.Use(New(config.RateLimitConfig{
+		Window:     time.Minute,
+		GenericMax: 1,
+		BookingMax: 1,
+	}, nil))
+	app.Get("/api/one", func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+	app.Get("/api/two", func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	for _, path := range []string{"/api/one", "/api/two"} {
+		req, err := http.NewRequest(http.MethodGet, path, nil)
+		if err != nil {
+			t.Fatalf("NewRequest(%s) error = %v", path, err)
+		}
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("app.Test(%s) error = %v", path, err)
+		}
+		if resp.StatusCode != fiber.StatusNoContent {
+			t.Fatalf("status for %s = %d, want %d", path, resp.StatusCode, fiber.StatusNoContent)
+		}
+	}
+}
+
+func TestMiddlewareUsesBookingBurstLimitForSeatMutations(t *testing.T) {
+	app := fiber.New()
+	app.Use(New(config.RateLimitConfig{
+		Window:     time.Minute,
+		GenericMax: 1,
+		BookingMax: 2,
+	}, nil))
+	for _, path := range []string{"/api/seats/book", "/api/seats/rebook", "/api/seats/change"} {
+		app.Post(path, func(c fiber.Ctx) error {
+			return c.SendStatus(fiber.StatusNoContent)
+		})
+	}
+
+	for _, path := range []string{"/api/seats/book", "/api/seats/rebook", "/api/seats/change"} {
+		for i := 0; i < 2; i++ {
+			req, err := http.NewRequest(http.MethodPost, path, nil)
+			if err != nil {
+				t.Fatalf("NewRequest(%s) error = %v", path, err)
+			}
+			resp, err := app.Test(req)
+			if err != nil {
+				t.Fatalf("app.Test(%s) error = %v", path, err)
+			}
+			if resp.StatusCode != fiber.StatusNoContent {
+				t.Fatalf("status for %s request %d = %d, want %d", path, i+1, resp.StatusCode, fiber.StatusNoContent)
+			}
+		}
+	}
+}

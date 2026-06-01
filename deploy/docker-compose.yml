@@ -4,11 +4,16 @@ services:
       context: ..
       dockerfile: backend/Dockerfile
     environment:
+      APP_ENV: "${APP_ENV:-development}"
       HTTP_ADDR: ":8080"
       DATABASE_URL: "postgres://lalaland:lalaland@postgres:5432/lalaland?sslmode=disable"
       REDIS_URL: "redis://redis:6379/0"
+      DB_MAX_CONNS: "${DB_MAX_CONNS:-12}"
+      DB_MIN_CONNS: "${DB_MIN_CONNS:-1}"
+      DB_MAX_CONN_LIFETIME: "${DB_MAX_CONN_LIFETIME:-1h}"
+      DB_MAX_CONN_IDLE_TIME: "${DB_MAX_CONN_IDLE_TIME:-5m}"
       JWT_SECRET: "${JWT_SECRET:-change-me}"
-      HMAC_SECRET: "${HMAC_SECRET:-change-me}"
+      HMAC_SECRET: "${HMAC_SECRET:-change-me-hmac}"
       ADMIN_USERS: "${ADMIN_USERS:-admin}"
       ADMIN_PASSWORDS: "${ADMIN_PASSWORDS:-change-me-admin}"
       CHECKER_USER: "${CHECKER_USER:-checker}"

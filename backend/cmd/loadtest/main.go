@@ -147,6 +147,10 @@ func runBooking(ctx context.Context, client *http.Client, cfg config) ([]result,
 		if err != nil {
 			return result{status: status, dur: time.Since(start), err: err}
 		}
+		status, err = studentRegister(ctx, client, cfg, token, i)
+		if err != nil {
+			return result{status: status, dur: time.Since(start), err: err}
+		}
 		status, err = bookSeat(ctx, client, cfg, token, studentID, seatIDs[i%len(seatIDs)])
 		return result{status: status, dur: time.Since(start), err: err}
 	}), nil
@@ -248,6 +252,21 @@ func studentLogin(ctx context.Context, client *http.Client, cfg config, studentI
 		return "", status, err
 	}
 	return parsed.Token, status, nil
+}
+
+func studentRegister(ctx context.Context, client *http.Client, cfg config, token string, idx int) (int, error) {
+	body := map[string]any{
+		"class_code":       fmt.Sprintf("%04d", 9000+(idx%80)),
+		"seat_no_in_class": (idx % 60) + 1,
+	}
+	raw, status, err := postJSON(ctx, client, cfg.baseURL+"/api/student/register", token, body)
+	if err != nil {
+		return status, err
+	}
+	if status != http.StatusOK {
+		return status, fmt.Errorf("student register status %d: %s", status, string(raw))
+	}
+	return status, nil
 }
 
 func bookSeat(ctx context.Context, client *http.Client, cfg config, token, studentID string, seatID int64) (int, error) {

@@ -331,6 +331,7 @@ func writeServiceError(c fiber.Ctx, err error) error {
 		errors.Is(err, ErrInvalidAssignment),
 		errors.Is(err, ErrInvalidConfigKey),
 		errors.Is(err, ErrInvalidJSON),
+		errors.Is(err, ErrInvalidConfigValue),
 		errors.Is(err, ErrInvalidExportType),
 		errors.Is(err, ErrInvalidBackup),
 		errors.Is(err, ErrInvalidRestoreToken),
@@ -340,6 +341,8 @@ func writeServiceError(c fiber.Ctx, err error) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 	case errors.Is(err, ErrAssignmentConflict):
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": ErrAssignmentConflict.Error()})
+	case errors.Is(err, student.ErrIncompleteProfile):
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": student.ErrIncompleteProfile.Error()})
 	default:
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}

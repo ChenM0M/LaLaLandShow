@@ -26,12 +26,14 @@ var (
 	ErrSameSeatChange          = errors.New("new seat must be different from current seat")
 	ErrChangeLocked            = errors.New("seat changes are locked")
 	ErrBookingFrozen           = errors.New("seat operations are frozen")
+	ErrIncompleteRegistration  = errors.New("student registration is incomplete")
 )
 
 type Store interface {
 	SnapshotStore
 	BookSeats(ctx context.Context, actorStudentID string, entries []BookEntry) ([]BookedSeat, error)
-	ReleaseSeat(ctx context.Context, actorStudentID string) (BookedSeat, error)
+	RebookSeats(ctx context.Context, actorStudentID string, entries []BookEntry) (RebookResult, error)
+	ReleaseSeats(ctx context.Context, actorStudentID string) ([]BookedSeat, error)
 	ChangeSeat(ctx context.Context, actorStudentID string, newSeatID int64) (SeatChange, error)
 }
 
@@ -63,7 +65,13 @@ type BookResult struct {
 }
 
 type ReleaseResult struct {
-	Released BookedSeat `json:"released"`
+	Released         BookedSeat   `json:"released"`
+	ReleasedBookings []BookedSeat `json:"released_bookings,omitempty"`
+}
+
+type RebookResult struct {
+	ReleasedBookings []BookedSeat `json:"released_bookings"`
+	Bookings         []BookedSeat `json:"bookings"`
 }
 
 type SeatChange struct {
@@ -84,17 +92,33 @@ func (s *Service) Book(ctx context.Context, actorStudentID string, entries []Boo
 	return BookResult{Bookings: bookings}, nil
 }
 
+func (s *Service) Rebook(ctx context.Context, actorStudentID string, entries []BookEntry) (RebookResult, error) {
+	normalized, err := normalizeBookEntries(actorStudentID, entries)
+	if err != nil {
+		return RebookResult{}, err
+	}
+
+	result, err := s.store.RebookSeats(ctx, actorStudentID, normalized)
+	if err != nil {
+		return RebookResult{}, fmt.Errorf("rebook seats: %w", err)
+	}
+	return result, nil
+}
+
 func (s *Service) Release(ctx context.Context, actorStudentID string) (ReleaseResult, error) {
 	actorStudentID = strings.TrimSpace(actorStudentID)
 	if !student.IsValidStudentID(actorStudentID) {
 		return ReleaseResult{}, ErrInvalidBookingStudentID
 	}
 
-	released, err := s.store.ReleaseSeat(ctx, actorStudentID)
+	released, err := s.store.ReleaseSeats(ctx, actorStudentID)
 	if err != nil {
 		return ReleaseResult{}, fmt.Errorf("release seat: %w", err)
 	}
-	return ReleaseResult{Released: released}, nil
+	if len(released) == 0 {
+		return ReleaseResult{}, ErrBookingNotFound
+	}
+	return ReleaseResult{Released: released[0], ReleasedBookings: released}, nil
 }
 
 func (s *Service) Change(ctx context.Context, actorStudentID string, newSeatID int64) (SeatChange, error) {

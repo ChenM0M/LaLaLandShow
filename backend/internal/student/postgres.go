@@ -89,7 +89,7 @@ WHERE student_id = $1`, studentID)
 
 func (s *PostgresStore) getOwnBooking(ctx context.Context, studentID string) (*Booking, error) {
 	row := s.db.QueryRow(ctx, `
-SELECT b.seat_id, s.zone, s.row_no, s.col_no, b.ticket_version, b.booked_at
+SELECT b.seat_id, b.student_id, s.zone, s.row_no, s.col_no, b.ticket_version, b.booked_at
 FROM seat_bookings b
 JOIN seats s ON s.seat_id = b.seat_id
 WHERE b.student_id = $1`, studentID)
@@ -106,7 +106,7 @@ WHERE b.student_id = $1`, studentID)
 
 func (s *PostgresStore) getProxyBookings(ctx context.Context, studentID string) ([]Booking, error) {
 	rows, err := s.db.Query(ctx, `
-SELECT b.seat_id, s.zone, s.row_no, s.col_no, b.ticket_version, b.booked_at
+SELECT b.seat_id, b.student_id, s.zone, s.row_no, s.col_no, b.ticket_version, b.booked_at
 FROM seat_bookings b
 JOIN seats s ON s.seat_id = b.seat_id
 WHERE b.booked_by_student_id = $1
@@ -182,6 +182,7 @@ func scanBooking(row bookingScanner) (Booking, error) {
 	var bookedAt time.Time
 	if err := row.Scan(
 		&booking.SeatID,
+		&booking.StudentID,
 		&booking.Zone,
 		&booking.RowNo,
 		&booking.ColNo,

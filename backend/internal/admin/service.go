@@ -33,6 +33,7 @@ var (
 	ErrConfigNotFound      = errors.New("config key not found")
 	ErrInvalidConfigKey    = errors.New("invalid config key")
 	ErrInvalidJSON         = errors.New("value_json must be valid JSON")
+	ErrInvalidConfigValue  = errors.New("invalid config value")
 	ErrInvalidExportType   = errors.New("invalid export type")
 	ErrInvalidBackup       = errors.New("invalid backup snapshot")
 	ErrInvalidRestoreToken = errors.New("invalid restore confirmation token")
@@ -500,7 +501,24 @@ func (s *Service) SetConfig(ctx context.Context, input ConfigInput) (ConfigEntry
 	if !json.Valid(input.ValueJSON) {
 		return ConfigEntry{}, ErrInvalidJSON
 	}
+	if err := validateConfigValue(input.Key, input.ValueJSON); err != nil {
+		return ConfigEntry{}, err
+	}
 	return s.store.SetConfig(ctx, input)
+}
+
+func validateConfigValue(key string, raw json.RawMessage) error {
+	switch key {
+	case "booking_open_at", "booking_lock_at", "show_start_at", "countdown_target_at":
+		var value string
+		if err := json.Unmarshal(raw, &value); err != nil || strings.TrimSpace(value) == "" {
+			return ErrInvalidConfigValue
+		}
+		if _, err := time.Parse(time.RFC3339, value); err != nil {
+			return ErrInvalidConfigValue
+		}
+	}
+	return nil
 }
 
 func (s *Service) PublicConfig(ctx context.Context) (map[string]json.RawMessage, error) {

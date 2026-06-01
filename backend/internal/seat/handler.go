@@ -31,11 +31,12 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	group := app.Group("/api/seats", h.auth.Middleware())
 	group.Get("/snapshot", h.snapshot)
 	group.Post("/book", h.book)
+	group.Post("/rebook", h.rebook)
 	group.Post("/release", h.release)
 	group.Post("/change", h.change)
 	group.Get("/stream", fibersse.New(fibersse.Config{
 		Retry:             2 * time.Second,
-		HeartbeatInterval: 15 * time.Second,
+		HeartbeatInterval: 5 * time.Second,
 		Handler:           h.stream,
 	}))
 }
@@ -89,12 +90,48 @@ func (h *Handler) release(c fiber.Ctx) error {
 	if err != nil {
 		return writeBookingError(c, err)
 	}
-	seatID := result.Released.SeatID
-	h.broker.Publish(StreamEvent{
-		Type:   "seat_changed",
-		SeatID: &seatID,
-		State:  StateFree,
-	})
+	for _, released := range result.ReleasedBookings {
+		seatID := released.SeatID
+		h.broker.Publish(StreamEvent{
+			Type:   "seat_changed",
+			SeatID: &seatID,
+			State:  StateFree,
+		})
+	}
+	return c.JSON(result)
+}
+
+func (h *Handler) rebook(c fiber.Ctx) error {
+	studentID, ok := auth.StudentID(c)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing authenticated student"})
+	}
+
+	entries, err := parseBookEntries(c.Body())
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid JSON body"})
+	}
+
+	result, err := h.service.Rebook(c.Context(), studentID, entries)
+	if err != nil {
+		return writeBookingError(c, err)
+	}
+	for _, released := range result.ReleasedBookings {
+		seatID := released.SeatID
+		h.broker.Publish(StreamEvent{
+			Type:   "seat_changed",
+			SeatID: &seatID,
+			State:  StateFree,
+		})
+	}
+	for _, booking := range result.Bookings {
+		seatID := booking.SeatID
+		h.broker.Publish(StreamEvent{
+			Type:   "seat_changed",
+			SeatID: &seatID,
+			State:  StateOthers,
+		})
+	}
 	return c.JSON(result)
 }
 
@@ -201,7 +238,8 @@ func writeBookingError(c fiber.Ctx, err error) error {
 		errors.Is(err, ErrBookingLocked),
 		errors.Is(err, ErrSeatLocked),
 		errors.Is(err, ErrChangeLocked),
-		errors.Is(err, ErrBookingFrozen):
+		errors.Is(err, ErrBookingFrozen),
+		errors.Is(err, ErrIncompleteRegistration):
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": bookingErrorMessage(err)})
 	default:
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
@@ -240,6 +278,8 @@ func bookingErrorMessage(err error) string {
 		return ErrChangeLocked.Error()
 	case errors.Is(err, ErrBookingFrozen):
 		return ErrBookingFrozen.Error()
+	case errors.Is(err, ErrIncompleteRegistration):
+		return ErrIncompleteRegistration.Error()
 	default:
 		return err.Error()
 	}

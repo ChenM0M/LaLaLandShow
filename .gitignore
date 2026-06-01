@@ -4,6 +4,7 @@
 .env
 .env.*
 !.env.example
+!deploy/.env.prod.example
 deploy/.env
 
 # Frontend build/dependency output

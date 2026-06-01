@@ -162,6 +162,17 @@ func TestServiceSetConfigRequiresJSON(t *testing.T) {
 	}
 }
 
+func TestServiceSetConfigValidatesTimeValues(t *testing.T) {
+	service := NewService(&fakeStore{}, auth.NewManager("jwt-secret", time.Hour))
+
+	if _, err := service.SetConfig(context.Background(), ConfigInput{Key: "booking_open_at", ValueJSON: json.RawMessage(`"tomorrow"`)}); !errors.Is(err, ErrInvalidConfigValue) {
+		t.Fatalf("SetConfig(invalid time) error = %v, want %v", err, ErrInvalidConfigValue)
+	}
+	if _, err := service.SetConfig(context.Background(), ConfigInput{Key: "booking_open_at", ValueJSON: json.RawMessage(`"2026-05-31T12:00:00Z"`)}); err != nil {
+		t.Fatalf("SetConfig(valid time) error = %v", err)
+	}
+}
+
 func TestServiceExportTypeWhitelist(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store, auth.NewManager("jwt-secret", time.Hour))
