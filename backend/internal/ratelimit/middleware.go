@@ -48,7 +48,17 @@ func New(cfg config.RateLimitConfig, redisClient *redis.Client) fiber.Handler {
 
 func isBookingBurstPath(path string) bool {
 	switch path {
-	case "/api/seats/book", "/api/seats/rebook", "/api/seats/change":
+	case "/api/public/config",
+		"/api/public/window-state",
+		"/api/student/login",
+		"/api/student/register",
+		"/api/student/me",
+		"/api/seats/snapshot",
+		"/api/seats/book",
+		"/api/seats/rebook",
+		"/api/seats/change",
+		"/api/ticket/mine",
+		"/api/ticket/me":
 		return true
 	default:
 		return false

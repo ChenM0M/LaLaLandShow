@@ -620,7 +620,7 @@ async function submitSelection() {
 }
 
 function startPan(event: PointerEvent) {
-  if ((event.target as HTMLElement).closest('.seat-topbar, .seat-top-panel, .map-zoom-controls, .bottom-sheet, .rules-modal-overlay, .seat-notice-overlay, .mini-map')) return
+  if ((event.target as HTMLElement).closest('.seat, .seat-topbar, .seat-top-panel, .map-zoom-controls, .bottom-sheet, .rules-modal-overlay, .seat-notice-overlay, .mini-map')) return
 
   activePointers.value.set(event.pointerId, { x: event.clientX, y: event.clientY })
 
@@ -824,6 +824,7 @@ onUnmounted(() => {
                     :title="`${seatLabel(seat)} · ${seatStateLabel(seat)}`"
                     :aria-label="`${seatLabel(seat)} · ${seatStateLabel(seat)}`"
                     :disabled="!canSelectSeat(seat)"
+                    @pointerdown.stop
                     @click.stop="clickSeat(seat, $event)"
                   >
                     <span v-if="selectedSeatIds.has(seat.seat_id)" class="seat-mark">

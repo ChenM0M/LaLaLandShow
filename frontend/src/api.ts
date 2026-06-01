@@ -11,6 +11,17 @@ api.interceptors.request.use(config => {
   return config
 })
 
+api.interceptors.response.use(
+  response => response,
+  error => {
+    const url = error?.config?.url || ''
+    if (error?.response?.status === 401 && !url.startsWith('/admin') && !url.startsWith('/checker')) {
+      window.dispatchEvent(new CustomEvent('student-auth-expired'))
+    }
+    return Promise.reject(error)
+  },
+)
+
 export interface Student {
   student_id: string
   class_code?: string | null

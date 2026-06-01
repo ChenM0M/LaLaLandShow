@@ -181,4 +181,4 @@ Authentication:
 - Checker endpoints use staff JWT bearer tokens signed with `JWT_SECRET`; `admin` tokens can call checker endpoints.
 - Admin endpoints use staff JWT bearer tokens signed with `JWT_SECRET` and require role `admin`.
 - Ticket QR tokens are HMAC-SHA256 signed with `HMAC_SECRET`; check-in verification compares signatures in constant time and rejects stale `ticket_version` values.
-- API routes are rate limited and return `429` with `{ "error": "rate limit exceeded" }` when the per-window quota is exceeded; `/healthz` and `/api/seats/stream` are exempt.
+- API routes are rate limited and return `429` with `{ "error": "rate limit exceeded" }` when the per-window quota is exceeded; `/healthz` and `/api/seats/stream` are exempt. Opening-rush paths use the higher booking quota: public config/window state, student login/register/me, seat snapshot/book/rebook/change, and ticket lookup.

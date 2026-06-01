@@ -74,7 +74,7 @@ go run ./cmd/loadtest -mode booking -requests 900 -concurrency 60 -restore-after
 go run ./cmd/loadtest -mode booking -requests 1200 -concurrency 80 -restore-after=true
 ```
 
-Before full rush testing, raise or disable API rate limits for the test window so the result measures booking capacity rather than limiter behavior:
+Before full rush testing, raise API rate limits for the test window so the result measures booking capacity rather than limiter behavior. This matters when many synthetic users come from the same client IP, and it also matches school NAT scenarios where many real students share one egress IP:
 
 ```bash
 RATE_LIMIT_GENERIC_MAX=5000 RATE_LIMIT_BOOKING_MAX=5000 docker compose -f deploy/docker-compose.yml up --build -d backend

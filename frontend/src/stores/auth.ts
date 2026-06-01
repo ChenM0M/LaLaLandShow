@@ -40,9 +40,29 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('token')
   }
 
+  function syncTokenFromStorage() {
+    const storedToken = localStorage.getItem('token')
+    if (!storedToken && token.value) {
+      logout()
+      return
+    }
+    if (storedToken && storedToken !== token.value) {
+      token.value = storedToken
+      student.value = null
+      needRegister.value = false
+    }
+  }
+
   if (typeof window !== 'undefined') {
     window.addEventListener('storage', (event) => {
       if (event.key === 'token' && !event.newValue) logout()
+      if (event.key === 'token' && event.newValue) syncTokenFromStorage()
+    })
+    window.addEventListener('focus', syncTokenFromStorage)
+    window.addEventListener('pageshow', syncTokenFromStorage)
+    window.addEventListener('student-auth-expired', logout)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') syncTokenFromStorage()
     })
   }
 

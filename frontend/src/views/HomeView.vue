@@ -70,8 +70,8 @@ const acts: ActPage[] = [
   {
     key: '5',
     label: '第五幕',
-    title: '公寓夜話',
     color: '#D96A36',
+    title: '公寓夜話',
     quote: "We should call it Seb's.",
     desc: '溫暖的公寓裡，俱樂部的名字第一次被寫下。愛情暫時擁有了形狀，夢想也擁有了地址。',
     song: 'City of Stars',

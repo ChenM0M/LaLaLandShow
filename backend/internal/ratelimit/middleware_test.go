@@ -101,31 +101,47 @@ func TestMiddlewareLimitsPerPath(t *testing.T) {
 	}
 }
 
-func TestMiddlewareUsesBookingBurstLimitForSeatMutations(t *testing.T) {
+func TestMiddlewareUsesBookingBurstLimitForRushPaths(t *testing.T) {
 	app := fiber.New()
 	app.Use(New(config.RateLimitConfig{
 		Window:     time.Minute,
 		GenericMax: 1,
 		BookingMax: 2,
 	}, nil))
-	for _, path := range []string{"/api/seats/book", "/api/seats/rebook", "/api/seats/change"} {
-		app.Post(path, func(c fiber.Ctx) error {
+	routes := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/api/public/config"},
+		{http.MethodGet, "/api/public/window-state"},
+		{http.MethodPost, "/api/student/login"},
+		{http.MethodPost, "/api/student/register"},
+		{http.MethodGet, "/api/student/me"},
+		{http.MethodGet, "/api/seats/snapshot"},
+		{http.MethodPost, "/api/seats/book"},
+		{http.MethodPost, "/api/seats/rebook"},
+		{http.MethodPost, "/api/seats/change"},
+		{http.MethodGet, "/api/ticket/mine"},
+		{http.MethodGet, "/api/ticket/me"},
+	}
+	for _, route := range routes {
+		app.Add([]string{route.method}, route.path, func(c fiber.Ctx) error {
 			return c.SendStatus(fiber.StatusNoContent)
 		})
 	}
 
-	for _, path := range []string{"/api/seats/book", "/api/seats/rebook", "/api/seats/change"} {
+	for _, route := range routes {
 		for i := 0; i < 2; i++ {
-			req, err := http.NewRequest(http.MethodPost, path, nil)
+			req, err := http.NewRequest(route.method, route.path, nil)
 			if err != nil {
-				t.Fatalf("NewRequest(%s) error = %v", path, err)
+				t.Fatalf("NewRequest(%s) error = %v", route.path, err)
 			}
 			resp, err := app.Test(req)
 			if err != nil {
-				t.Fatalf("app.Test(%s) error = %v", path, err)
+				t.Fatalf("app.Test(%s) error = %v", route.path, err)
 			}
 			if resp.StatusCode != fiber.StatusNoContent {
-				t.Fatalf("status for %s request %d = %d, want %d", path, i+1, resp.StatusCode, fiber.StatusNoContent)
+				t.Fatalf("status for %s request %d = %d, want %d", route.path, i+1, resp.StatusCode, fiber.StatusNoContent)
 			}
 		}
 	}
