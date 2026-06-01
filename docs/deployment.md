@@ -120,4 +120,4 @@ cd deploy
 docker compose --env-file .env -f docker-compose.prod.yml up -d
 ```
 
-Open `http://localhost` and check `http://localhost/healthz`.
+Open `http://localhost:18088` and check `http://localhost:18088/healthz`.
