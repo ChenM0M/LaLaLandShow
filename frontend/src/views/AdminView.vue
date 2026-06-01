@@ -9,6 +9,7 @@ import {
   adminStudents,
   assignAdminSeat,
   exportBackup,
+  getAdminConfig,
   lockAdminSeat,
   planRestore,
   restoreBackup,
@@ -33,6 +34,12 @@ const assignValue = ref('')
 const customLabel = ref('')
 const configKey = ref('play_name')
 const configValue = ref('"La La Land"')
+const windowConfig = ref({
+  countdown_target_at: '',
+  booking_open_at: '',
+  booking_lock_at: '',
+  show_start_at: '',
+})
 const backupText = ref('')
 const restoreToken = ref('')
 const restorePlan = ref<any>(null)
@@ -46,10 +53,21 @@ const zoneLabels: Record<string, string> = {
   right: '右區',
 }
 
+const windowStateLabels: Record<string, string> = {
+  before_open: '尚未開放',
+  open: '預約開放中',
+  locked: '預約已停止',
+  show_started: '演出已開始',
+}
+
 const zoneOrder = ['left', 'middle', 'right']
 
 const selectedSeat = computed(() => seats.value.find(s => s.seat_id === selectedSeatId.value) || seats.value[0])
 const occupiedSeats = computed(() => seats.value.filter(s => s.booking).length)
+const currentWindowStateLabel = computed(() => {
+  const state = dashboard.value?.window.state
+  return state ? windowStateLabels[state] ?? state : '-'
+})
 const adminZones = computed(() => {
   const byZone = new Map<string, Map<number, AdminSeat[]>>()
   for (const seat of seats.value) {
@@ -96,6 +114,23 @@ function formatDate(value?: string | null) {
   return new Date(value).toLocaleString('zh-TW', { hour12: false })
 }
 
+function toDateTimeLocal(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const offset = date.getTimezoneOffset() * 60000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16)
+}
+
+function fromDateTimeLocal(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) throw new Error('invalid date')
+  return date.toISOString()
+}
+
+function minutesFromNow(minutes: number) {
+  return new Date(Date.now() + minutes * 60000).toISOString()
+}
+
 async function login() {
   loading.value = true
   error.value = ''
@@ -138,6 +173,7 @@ async function refreshAll() {
   audit.value = auditRows
   checkins.value = checkinRows
   if (!selectedSeatId.value && seatRows.length) selectedSeatId.value = seatRows[0].seat_id
+  await loadWindowConfig()
 }
 
 async function mutateSeat(kind: 'student' | 'custom' | 'release' | 'lock' | 'unlock') {
@@ -177,6 +213,84 @@ async function saveConfig() {
   } finally {
     loading.value = false
   }
+}
+
+async function loadWindowConfig() {
+  const keys = ['countdown_target_at', 'booking_open_at', 'booking_lock_at', 'show_start_at'] as const
+  const results = await Promise.allSettled(keys.map(key => getAdminConfig(key)))
+  results.forEach((result, index) => {
+    if (result.status !== 'fulfilled') return
+    const value = result.value?.value
+    if (typeof value === 'string') {
+      windowConfig.value[keys[index]] = toDateTimeLocal(value)
+    }
+  })
+  if (!windowConfig.value.countdown_target_at && windowConfig.value.booking_open_at) {
+    windowConfig.value.countdown_target_at = windowConfig.value.booking_open_at
+  }
+}
+
+async function saveWindowConfig(next?: Partial<Record<keyof typeof windowConfig.value, string>>) {
+  loading.value = true
+  error.value = ''
+  message.value = ''
+  try {
+    const values = {
+      countdown_target_at: next?.countdown_target_at ?? (windowConfig.value.countdown_target_at
+        ? fromDateTimeLocal(windowConfig.value.countdown_target_at)
+        : fromDateTimeLocal(windowConfig.value.booking_open_at)),
+      booking_open_at: next?.booking_open_at ?? fromDateTimeLocal(windowConfig.value.booking_open_at),
+      booking_lock_at: next?.booking_lock_at ?? fromDateTimeLocal(windowConfig.value.booking_lock_at),
+      show_start_at: next?.show_start_at ?? fromDateTimeLocal(windowConfig.value.show_start_at),
+    }
+    await Promise.all([
+      setAdminConfig('countdown_target_at', values.countdown_target_at),
+      setAdminConfig('booking_open_at', values.booking_open_at),
+      setAdminConfig('booking_lock_at', values.booking_lock_at),
+      setAdminConfig('show_start_at', values.show_start_at),
+    ])
+    message.value = '階段已更新'
+    await refreshAll()
+  } catch (e: any) {
+    error.value = e?.message === 'invalid date' ? '請填寫完整且合法的時間' : (e?.response?.data?.error || '更新階段失敗')
+  } finally {
+    loading.value = false
+  }
+}
+
+function applyStage(stage: 'before_open' | 'open' | 'locked' | 'show_started') {
+  const soon = minutesFromNow(60)
+  const openNow = minutesFromNow(-1)
+  const openYesterday = minutesFromNow(-60 * 24)
+  const lockedNow = minutesFromNow(-1)
+  const tomorrow = minutesFromNow(60 * 24)
+  const presets = {
+    before_open: {
+      countdown_target_at: soon,
+      booking_open_at: soon,
+      booking_lock_at: minutesFromNow(60 * 24 * 30),
+      show_start_at: minutesFromNow(60 * 24 * 31),
+    },
+    open: {
+      countdown_target_at: openNow,
+      booking_open_at: openNow,
+      booking_lock_at: minutesFromNow(60 * 24 * 30),
+      show_start_at: minutesFromNow(60 * 24 * 31),
+    },
+    locked: {
+      countdown_target_at: openYesterday,
+      booking_open_at: openYesterday,
+      booking_lock_at: lockedNow,
+      show_start_at: tomorrow,
+    },
+    show_started: {
+      countdown_target_at: minutesFromNow(-60 * 24 * 2),
+      booking_open_at: minutesFromNow(-60 * 24 * 2),
+      booking_lock_at: minutesFromNow(-60 * 24),
+      show_start_at: minutesFromNow(-1),
+    },
+  }
+  saveWindowConfig(presets[stage])
 }
 
 async function downloadBackup() {
@@ -257,7 +371,7 @@ onMounted(() => {
     </section>
 
     <section v-else class="stack">
-      <div class="toolbar" style="justify-content:space-between">
+      <div class="toolbar admin-toolbar">
         <div>
           <p class="caption">ADMIN CONSOLE</p>
           <h1 class="h1">管理後台</h1>
@@ -454,6 +568,45 @@ onMounted(() => {
 
       <section v-if="tab === 'config'" class="card stack">
         <h2 class="h2">系統設定</h2>
+        <div class="stage-control">
+          <div>
+            <p class="caption">STAGE CONTROL</p>
+            <h3>階段調整</h3>
+            <p class="muted">目前階段：{{ currentWindowStateLabel }}</p>
+          </div>
+          <div class="stage-buttons">
+            <button class="btn-outline" :disabled="loading" @click="applyStage('before_open')">尚未開放</button>
+            <button class="btn-primary" :disabled="loading" @click="applyStage('open')">立即開放預約</button>
+            <button class="btn-outline" :disabled="loading" @click="applyStage('locked')">停止預約</button>
+            <button class="btn-outline" :disabled="loading" @click="applyStage('show_started')">演出開始</button>
+          </div>
+        </div>
+        <div class="split">
+          <div>
+            <label>首頁倒數目標</label>
+            <input v-model="windowConfig.countdown_target_at" type="datetime-local" />
+          </div>
+          <div>
+            <label>開放預約時間</label>
+            <input v-model="windowConfig.booking_open_at" type="datetime-local" />
+          </div>
+        </div>
+        <div class="split">
+          <div>
+            <label>停止預約 / 改位時間</label>
+            <input v-model="windowConfig.booking_lock_at" type="datetime-local" />
+          </div>
+        </div>
+        <div class="split">
+          <div>
+            <label>演出開始時間</label>
+            <input v-model="windowConfig.show_start_at" type="datetime-local" />
+          </div>
+          <div class="config-action">
+            <button class="btn-primary" :disabled="loading" @click="saveWindowConfig()">儲存階段時間</button>
+          </div>
+        </div>
+        <hr class="soft-divider" />
         <div class="split">
           <div>
             <label>設定 Key</label>
@@ -468,7 +621,7 @@ onMounted(() => {
       </section>
 
       <section v-if="tab === 'backup'" class="card stack">
-        <div class="toolbar" style="justify-content:space-between">
+        <div class="toolbar admin-toolbar">
           <div>
             <h2 class="h2">備份 / 復原</h2>
             <p class="muted">復原會取代業務表，請先產生計畫並核對 token。</p>
@@ -521,6 +674,10 @@ onMounted(() => {
   background: var(--surface-glass);
   color: var(--gold);
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.admin-toolbar {
+  justify-content: space-between;
 }
 
 .seat-map-head {
@@ -679,9 +836,57 @@ onMounted(() => {
   text-align: right;
 }
 
-@media (max-width: 900px) {
+.stage-control {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.stage-control h3 {
+  margin: 4px 0 8px;
+  color: var(--cream);
+  font-size: 20px;
+}
+
+.stage-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.config-action {
+  display: flex;
+  align-items: end;
+}
+
+.soft-divider {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 860px) {
+  .glass-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .glass-tabs::-webkit-scrollbar { display: none; }
+  .glass-tab {
+    flex: 0 0 auto;
+    min-width: 72px;
+    padding: 9px 14px;
+    font-size: 13px;
+  }
+
   .seat-map-head {
-    align-items: start;
+    align-items: flex-start;
     flex-direction: column;
   }
 
@@ -702,5 +907,99 @@ onMounted(() => {
   .admin-seat-line {
     gap: 4px;
   }
+
+  .admin-stage {
+    width: min(280px, 80%);
+    margin-bottom: 20px;
+  }
+
+  .stage-control {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .stage-buttons {
+    justify-content: flex-start;
+  }
 }
+
+@media (max-width: 640px) {
+  .glass-tab {
+    min-width: 64px;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .admin-seat-map {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    max-height: none;
+    padding: 4px 8px 16px;
+  }
+
+  .admin-zone-header {
+    text-align: left;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gold-light);
+    letter-spacing: 0.15em;
+  }
+
+  .admin-seat {
+    width: 22px;
+    height: 22px;
+  }
+
+  .admin-seat-line {
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+
+  .admin-stage {
+    width: 100%;
+    border-radius: 0;
+    margin-bottom: 16px;
+  }
+
+  .seat-detail-list div {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .seat-detail-list strong {
+    text-align: left;
+  }
+}
+
+@media (max-width: 480px) {
+  .glass-tabs {
+    border-radius: var(--radius-lg);
+    padding: 4px;
+    gap: 2px;
+  }
+
+  .glass-tab {
+    min-width: 56px;
+    padding: 7px 10px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .admin-seat {
+    width: 20px;
+    height: 20px;
+  }
+
+  .admin-row-label {
+    width: 16px;
+    font-size: 10px;
+  }
+
+  .admin-zone-rows {
+    gap: 5px;
+  }
+}
+
 </style>

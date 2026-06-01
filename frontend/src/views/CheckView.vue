@@ -842,8 +842,8 @@ button.warn:hover:not(:disabled) {
   }
 
   .scanner-frame {
-    aspect-ratio: 1 / 1;
-    max-height: 65vh; /* Ensure it fits on phone screen alongside metrics */
+    aspect-ratio: 4 / 3;
+    max-height: 50vh;
   }
 
   .scan-reticle {
@@ -866,6 +866,126 @@ button.warn:hover:not(:disabled) {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
+  }
+
+  .check-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .check-page {
+    padding: 10px 8px;
+  }
+
+  .hud-metrics {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  .hud-metric:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .hud-metric {
+    padding: 8px 10px;
+  }
+
+  .hud-label {
+    font-size: 10px;
+    letter-spacing: 0.06em;
+  }
+
+  .hud-value {
+    font-size: 20px;
+  }
+
+  .highlight-metric .hud-value {
+    font-size: 22px;
+  }
+
+  .check-header {
+    padding-bottom: 10px;
+  }
+
+  .scanner-frame {
+    aspect-ratio: 1 / 1;
+    max-height: 55vh;
+  }
+
+  .result-icon {
+    font-size: 36px;
+  }
+
+  .result-title {
+    font-size: 18px;
+  }
+
+  .result-seat {
+    font-size: 16px;
+    padding: 3px 12px;
+  }
+
+  .result-id {
+    font-size: 14px;
+  }
+
+  .large-input {
+    font-size: 18px;
+    padding: 10px 12px;
+  }
+
+  .input-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .input-row .btn-primary {
+    width: 100%;
+  }
+
+  .scan-toggle {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .scan-toggle input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+  }
+
+  .manual-approve-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .mini-log {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .log-details strong {
+    font-size: 13px;
+  }
+
+  .log-details span {
+    font-size: 11px;
+  }
+
+  .fallback-card textarea {
+    min-height: 60px;
+  }
+
+  .scanner-section {
+    padding: 12px;
+  }
+
+  .scanner-controls {
+    gap: 10px;
   }
 }
 </style>

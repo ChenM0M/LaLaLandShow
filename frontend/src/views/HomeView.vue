@@ -201,6 +201,8 @@ function mountScrollMotion() {
       }, '+=0.2')
     })
 
+    tl.to({}, { duration: 1.2 })
+
     // Hero parallax
     gsap.to('.hero-image', {
       yPercent: 14,
@@ -218,16 +220,23 @@ function mountScrollMotion() {
     const pages = gsap.utils.toArray<HTMLElement>('.act-page')
     gsap.set(pages, { 
       xPercent: (i) => i === 0 ? 0 : 100,
-      width: (i) => i === 0 ? '100vw' : `calc(100vw - ${i * 20}px)`
+      width: (i) => i === 0 ? '100vw' : `calc(100vw - ${i * 14}px)`
     })
-    
+
     const tl = gsap.timeline({
       scrollTrigger: {
         trigger: '#flip-book',
         start: 'top top',
-        end: `+=${pages.length * 600}`,
+        end: `+=${pages.length * 980}`,
         pin: true,
-        scrub: 1,
+        scrub: 0.85,
+        anticipatePin: 1,
+        snap: {
+          snapTo: 1 / Math.max(1, pages.length - 1),
+          duration: { min: 0.18, max: 0.38 },
+          delay: 0.08,
+          ease: 'power2.out',
+        },
       }
     })
 
@@ -236,10 +245,12 @@ function mountScrollMotion() {
       tl.to(page, {
         xPercent: 0,
         x: 0,
-        ease: 'none',
-        duration: 1
-      }, '+=0.1')
+        ease: 'power1.inOut',
+        duration: 1.1
+      }, '+=0.32')
     })
+
+    tl.to({}, { duration: 1.6 })
   })
 }
 

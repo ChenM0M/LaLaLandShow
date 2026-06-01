@@ -37,6 +37,8 @@ const panStart = ref({ x: 0, y: 0, panX: 0, panY: 0 })
 const activePointers = ref(new Map<number, { x: number; y: number }>())
 const initialPinchDist = ref(0)
 const initialPinchZoom = ref(1)
+const initialPinchCenter = ref({ screenX: 0, screenY: 0, contentX: 0, contentY: 0 })
+const lastPointerType = ref('')
 const mapMetrics = ref({
   left: 0,
   top: 0,
@@ -373,8 +375,11 @@ async function handleNoticePrimary() {
   }
 }
 
-function setZoom(next: number) {
+function setZoomAroundContent(next: number, contentX: number, contentY: number, screenX: number, screenY: number) {
   zoom.value = Math.min(2.15, Math.max(0.36, Number(next.toFixed(2))))
+  panX.value = Math.round(screenX - contentX * zoom.value)
+  panY.value = Math.round(screenY - contentY * zoom.value)
+  clampPan()
   scheduleMapMetrics()
 }
 
@@ -496,6 +501,7 @@ function focusContentPoint(contentX: number, contentY: number, targetZoom = 1.36
 }
 
 function focusElement(element: HTMLElement, targetZoom = 1.42) {
+  if (lastPointerType.value === 'touch') return
   const rect = element.getBoundingClientRect()
   const contentX = (rect.left + rect.width / 2 - panX.value) / zoom.value
   const contentY = (rect.top + rect.height / 2 - panY.value) / zoom.value
@@ -504,6 +510,7 @@ function focusElement(element: HTMLElement, targetZoom = 1.42) {
 
 function focusMapPoint(event: MouseEvent) {
   if (hasDragged.value) return
+  if (lastPointerType.value === 'touch') return
   if ((event.target as HTMLElement).closest('.seat, .seat-topbar, .seat-top-panel, .map-zoom-controls, .bottom-sheet, .mini-map')) return
   const contentX = (event.clientX - panX.value) / zoom.value
   const contentY = (event.clientY - panY.value) / zoom.value
@@ -619,25 +626,58 @@ async function submitSelection() {
   }
 }
 
-function startPan(event: PointerEvent) {
-  if ((event.target as HTMLElement).closest('.seat, .seat-topbar, .seat-top-panel, .map-zoom-controls, .bottom-sheet, .rules-modal-overlay, .seat-notice-overlay, .mini-map')) return
+function beginPinch() {
+  const points = Array.from(activePointers.value.values())
+  if (points.length < 2) return
+  const dx = points[0].x - points[1].x
+  const dy = points[0].y - points[1].y
+  const centerX = (points[0].x + points[1].x) / 2
+  const centerY = (points[0].y + points[1].y) / 2
+  initialPinchDist.value = Math.hypot(dx, dy)
+  initialPinchZoom.value = zoom.value
+  initialPinchCenter.value = {
+    screenX: centerX,
+    screenY: centerY,
+    contentX: (centerX - panX.value) / zoom.value,
+    contentY: (centerY - panY.value) / zoom.value,
+  }
+  isPanning.value = false
+  hasDragged.value = true
+}
 
+function registerPointer(event: PointerEvent, allowSingleFingerPan: boolean) {
+  lastPointerType.value = event.pointerType
   activePointers.value.set(event.pointerId, { x: event.clientX, y: event.clientY })
 
-  if (activePointers.value.size === 2) {
-    const points = Array.from(activePointers.value.values())
-    const dx = points[0].x - points[1].x
-    const dy = points[0].y - points[1].y
-    initialPinchDist.value = Math.hypot(dx, dy)
-    initialPinchZoom.value = zoom.value
+  try {
+    ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+  } catch {
+    // Some browsers may reject capture for synthetic or already-captured pointers.
+  }
+
+  if (activePointers.value.size >= 2) {
+    beginPinch()
+    return
+  }
+
+  if (!allowSingleFingerPan) {
     isPanning.value = false
+    hasDragged.value = false
     return
   }
 
   isPanning.value = true
   hasDragged.value = false
   panStart.value = { x: event.clientX, y: event.clientY, panX: panX.value, panY: panY.value }
-  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+}
+
+function startPan(event: PointerEvent) {
+  if ((event.target as HTMLElement).closest('.seat, .seat-topbar, .seat-top-panel, .map-zoom-controls, .bottom-sheet, .rules-modal-overlay, .seat-notice-overlay, .mini-map')) return
+  registerPointer(event, true)
+}
+
+function startSeatPointer(event: PointerEvent) {
+  registerPointer(event, true)
 }
 
 function movePan(event: PointerEvent) {
@@ -649,14 +689,25 @@ function movePan(event: PointerEvent) {
     const dx = points[0].x - points[1].x
     const dy = points[0].y - points[1].y
     const dist = Math.hypot(dx, dy)
-    if (initialPinchDist.value > 0) setZoom(initialPinchZoom.value * (dist / initialPinchDist.value))
+    if (initialPinchDist.value > 0) {
+      const centerX = (points[0].x + points[1].x) / 2
+      const centerY = (points[0].y + points[1].y) / 2
+      setZoomAroundContent(
+        initialPinchZoom.value * (dist / initialPinchDist.value),
+        initialPinchCenter.value.contentX,
+        initialPinchCenter.value.contentY,
+        centerX,
+        centerY,
+      )
+    }
     return
   }
 
   if (!isPanning.value) return
   const dx = event.clientX - panStart.value.x
   const dy = event.clientY - panStart.value.y
-  if (Math.abs(dx) > 5 || Math.abs(dy) > 5) hasDragged.value = true
+  const dragThreshold = event.pointerType === 'touch' ? 9 : 5
+  if (Math.abs(dx) > dragThreshold || Math.abs(dy) > dragThreshold) hasDragged.value = true
   panX.value = panStart.value.panX + dx
   panY.value = panStart.value.panY + dy
   clampPan()
@@ -675,7 +726,7 @@ function endPan(event: PointerEvent) {
     }
     setTimeout(() => {
       hasDragged.value = false
-    }, 60)
+    }, lastPointerType.value === 'touch' ? 140 : 60)
   }
 }
 
@@ -823,8 +874,12 @@ onUnmounted(() => {
                     }"
                     :title="`${seatLabel(seat)} · ${seatStateLabel(seat)}`"
                     :aria-label="`${seatLabel(seat)} · ${seatStateLabel(seat)}`"
-                    :disabled="!canSelectSeat(seat)"
-                    @pointerdown.stop
+                    :aria-disabled="!canSelectSeat(seat)"
+                    :tabindex="canSelectSeat(seat) ? 0 : -1"
+                    @pointerdown.stop="startSeatPointer"
+                    @pointermove.stop="movePan"
+                    @pointerup.stop="endPan"
+                    @pointercancel.stop="endPan"
                     @click.stop="clickSeat(seat, $event)"
                   >
                     <span v-if="selectedSeatIds.has(seat.seat_id)" class="seat-mark">
@@ -1332,7 +1387,7 @@ onUnmounted(() => {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
-.seat:disabled {
+.seat[aria-disabled="true"] {
   opacity: 1;
 }
 
