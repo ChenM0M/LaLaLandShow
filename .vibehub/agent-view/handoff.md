@@ -4,7 +4,7 @@
 运行: R-20260529133755-405932d7
 阶段: Align
 生成来源: VibeHub
-生成时间: 2026-06-01T04:42:32Z
+生成时间: 2026-06-02T06:38:51Z
 来源: .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/output.md
 交接完成: 是
 证据等级: mixed
@@ -28,42 +28,52 @@
 ## 变更内容
 
 ### Completed
-- `user_confirmed`: 2026-06-01 用户反馈网站曾短暂可用，随后出现 Cloudflare 525 `SSL handshake failed`，询问 Docker Compose / 启动脚本是否可能诱发。
-- `hard_observed`: 已按 VibeHub 协议读取 `.vibehub/agent-view/current.md`、`.vibehub/agent-view/current-context.md`、`.vibehub/agent-view/handoff.md`、`.vibehub/rules/hard-rules.md` 和 `.vibehub/adapters/protocol.md`。
-- `hard_observed`: 仓库内未发现 nginx、caddy、traefik、cloudflared、证书或 TLS 终止配置文件；项目 Docker 配置只暴露应用 HTTP 端口。
-- `hard_observed`: `deploy/docker-compose.yml` 将 backend `8080` 映射到宿主 `APP_PORT`，默认 `8080`；`deploy/docker-compose.prod.yml` 将 app `8080` 映射到宿主 `WEB_PORT`，默认 `18088`。
-- `hard_observed`: `Dockerfile` 和 `deploy/app-entrypoint.sh` 显示生产镜像内直接执行 `/app/lalalandshow`，`HTTP_ADDR=:8080`，没有内建 HTTPS listener。
-- `hard_observed`: 当前本机开发容器状态为 backend Up 约 2 小时、Postgres healthy、Redis Up；backend 端口映射 `0.0.0.0:8080->8080/tcp`。
-- `hard_observed`: `curl http://127.0.0.1:8080/healthz` 返回 HTTP 200 和 `{"service":"lalalandshow-backend","status":"ok"}`。
-- `hard_observed`: `curl -vk https://127.0.0.1:8080/healthz` 在 TLS handshake 阶段失败，证明当前 app 端口只接受 HTTP，不能作为 HTTPS 源站直接给 Cloudflare Full/Full Strict 使用。
-- `hard_observed`: 当前 Vite dev server `http://127.0.0.1:5173/` 返回 HTTP 200；前端开发服务同样不是 HTTPS 源站。
-- `hard_observed`: backend 日志最近持续有 `/api/checker/stats`、`/api/student/me`、`/api/public/config`、`/healthz` 等 200 请求，未观察到容器崩溃或重启证据。
-- `inferred`: 最可能诱发 525 的内容不是 Docker Compose 本身，而是 Cloudflare/隧道/服务器面板把源站协议配置为 HTTPS，却指向了本项目只提供 HTTP 的 `8080` 或 `18088` 端口。
-- `user_confirmed`: 用户提供假设：Docker 镜像为纯 Go 二进制且只监听 `:8080` 纯 HTTP，Mac 无 443/80 listener，Cloudflare 代理用 HTTPS 连接源站导致 525。
-- `hard_observed`: 已再次核实 `Dockerfile` 最终镜像未安装 nginx/caddy/traefik，`deploy/app-entrypoint.sh` 最终 `exec /app/lalalandshow`，Go 服务使用 `app.Listen(cfg.HTTPAddr)`，默认 `HTTP_ADDR=:8080`。
-- `hard_observed`: `lsof -nP -iTCP:80 -sTCP:LISTEN` 和 `lsof -nP -iTCP:443 -sTCP:LISTEN` 均无输出；`curl -m 2 -vk https://127.0.0.1/` 连接 `127.0.0.1:443` 被拒绝。
-- `user_confirmed`: 用户追问是否可以从后端层面修复，以及是否应避开 `8080`/`443`。
-- `hard_observed`: `backend/internal/config/config.go` 当前只有 `HTTPAddr`，没有 TLS cert/key 配置；`backend/cmd/server/main.go` 当前只调用 `app.Listen(cfg.HTTPAddr)`。
-- `hard_observed`: 本地 Fiber v3 依赖支持 `ListenConfig{TLSConfig: ...}`，因此后端直出 HTTPS 在技术上可实现。
-- `hard_observed`: Cloudflare 官方网络端口文档显示默认代理支持 HTTP 端口 `80, 8080, 8880, 2052, 2082, 2086, 2095`，HTTPS 端口 `443, 2053, 2083, 2087, 2096, 8443`。Source: https://developers.cloudflare.com/fundamentals/reference/network-ports/
+- `user_confirmed`: 用户确认了座位图面向舞台和入口位置的方位，同意使用 SVG 架构重构座位指引页。
+- `hard_observed`: 将 `frontend/src/views/SeatGuideView.vue` 从 CSS Grid 布局彻底重构为 SVG `<svg>` 架构。
+- `hard_observed`: 重新梳理座位坐标系，彻底消除了元素遮挡和“塑料AI感”，更新了指引线路线计算逻辑，加入了发光 `stroke-dasharray` 路线动画和目标座位脉冲动画。
 ### Not Yet Done
-- `agent_reported`: 未能从本机进程表确认是否有 cloudflared/nginx/caddy 正在运行，因为 `ps aux` 被系统沙箱拒绝。
-- `agent_reported`: 未直接请求公网域名验证 Cloudflare 入口，因为用户尚未提供域名、Cloudflare SSL/TLS 模式、DNS 记录目标或服务器反代配置。
-- `agent_reported`: 未修改 Docker Compose、启动脚本或应用代码；本轮是排查和结论输出。
-- `agent_reported`: 尚未落地 HTTPS 修复，因为需要确认实际部署路径是公网服务器、Cloudflare Tunnel，还是本机穿透；不同路径的最小修法不同。
-- `agent_reported`: 尚未把后端改为可选 TLS listener；可行方案是新增 `TLS_CERT_FILE` / `TLS_KEY_FILE` 并在生产用 `HTTP_ADDR=:8443` 或映射宿主 `443:8443`。
+- `agent_reported`: 未能在 in-app Browser 中完成可靠滚动帧率采样；自动滚动采样时 `scrollY` 未推进，可能是当前 browser automation tab 状态限制。
+- `agent_reported`: 未在真实手机硬件上测试；真实设备仍可能受背景图尺寸影响。
 ### Key Decisions Made
-- `agent_reported`: 将 525 排查优先放在 Cloudflare 到源站 TLS 配置，而不是前端代码或后端业务接口，因为 525 发生在 HTTP 请求进入应用前的握手阶段。
-- `agent_reported`: 不建议让 Cloudflare 直接以 HTTPS 访问本项目 `8080`/`18088`，除非前面加了会终止 TLS 的反向代理并配置有效证书。
+- `agent_reported`: 优先移除“人为滞后”的 GSAP 配置，再处理图像资源；用户描述的“滞后感”与数值 scrub 高度吻合。
+- `agent_reported`: 暂时取消移动端 snap，牺牲一点段落吸附感，换取更跟手的滚动。
 ### Files Changed
+- .vibehub/agent-view/handoff.md
+- .vibehub/agent-view/sync.md
 - .vibehub/index/task-events.idx
+- .vibehub/state.yaml
 - .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.manifest.yaml
 - .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.md
 - .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/events.jsonl
 - .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/output.md
+- .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/sync/sync-20260602-060511.md
+- backend/internal/admin/postgres_window_test.go
+- backend/internal/seat/booking_test.go
+- backend/internal/seat/postgres_booking.go
+- backend/internal/seat/postgres_booking_test.go
+- docs/api.md
+- docs/db-schema.md
+- frontend/public/assets/images/lalaland-act-audition.jpg
+- frontend/public/assets/images/lalaland-act-farewell.jpg
+- frontend/public/assets/images/lalaland-act-freeway.jpg
+- frontend/public/assets/images/lalaland-act-hilldance.jpg
+- frontend/public/assets/images/lalaland-act-jazzclub.jpg
+- frontend/public/assets/images/lalaland-act-party.jpg
+- frontend/public/assets/images/lalaland-act-piano.jpg
+- frontend/public/assets/images/lalaland-act-pier.jpg
+- frontend/src/App.vue
+- frontend/src/router/index.ts
 - frontend/src/style.css
 - frontend/src/views/AdminView.vue
 - frontend/src/views/CheckView.vue
+- frontend/src/views/HomeView.vue
+- frontend/src/views/LoginView.vue
+- frontend/src/views/RegisterView.vue
+- frontend/src/views/SeatGuideView.vue
+- frontend/src/views/SeatsView.vue
+- frontend/src/views/StatusView.vue
+- frontend/src/views/TicketView.vue
+- update_time.go
 
 证据等级: mixed
 
@@ -74,29 +84,14 @@
   {
     "capability": "align",
     "completed": [
-      "`user_confirmed`: 2026-06-01 用户反馈网站曾短暂可用，随后出现 Cloudflare 525 `SSL handshake failed`，询问 Docker Compose / 启动脚本是否可能诱发。",
-      "`hard_observed`: 已按 VibeHub 协议读取 `.vibehub/agent-view/current.md`、`.vibehub/agent-view/current-context.md`、`.vibehub/agent-view/handoff.md`、`.vibehub/rules/hard-rules.md` 和 `.vibehub/adapters/protocol.md`。",
-      "`hard_observed`: 仓库内未发现 nginx、caddy、traefik、cloudflared、证书或 TLS 终止配置文件；项目 Docker 配置只暴露应用 HTTP 端口。",
-      "`hard_observed`: `deploy/docker-compose.yml` 将 backend `8080` 映射到宿主 `APP_PORT`，默认 `8080`；`deploy/docker-compose.prod.yml` 将 app `8080` 映射到宿主 `WEB_PORT`，默认 `18088`。",
-      "`hard_observed`: `Dockerfile` 和 `deploy/app-entrypoint.sh` 显示生产镜像内直接执行 `/app/lalalandshow`，`HTTP_ADDR=:8080`，没有内建 HTTPS listener。",
-      "`hard_observed`: 当前本机开发容器状态为 backend Up 约 2 小时、Postgres healthy、Redis Up；backend 端口映射 `0.0.0.0:8080->8080/tcp`。",
-      "`hard_observed`: `curl http://127.0.0.1:8080/healthz` 返回 HTTP 200 和 `{\"service\":\"lalalandshow-backend\",\"status\":\"ok\"}`。",
-      "`hard_observed`: `curl -vk https://127.0.0.1:8080/healthz` 在 TLS handshake 阶段失败，证明当前 app 端口只接受 HTTP，不能作为 HTTPS 源站直接给 Cloudflare Full/Full Strict 使用。",
-      "`hard_observed`: 当前 Vite dev server `http://127.0.0.1:5173/` 返回 HTTP 200；前端开发服务同样不是 HTTPS 源站。",
-      "`hard_observed`: backend 日志最近持续有 `/api/checker/stats`、`/api/student/me`、`/api/public/config`、`/healthz` 等 200 请求，未观察到容器崩溃或重启证据。",
-      "`inferred`: 最可能诱发 525 的内容不是 Docker Compose 本身，而是 Cloudflare/隧道/服务器面板把源站协议配置为 HTTPS，却指向了本项目只提供 HTTP 的 `8080` 或 `18088` 端口。",
-      "`user_confirmed`: 用户提供假设：Docker 镜像为纯 Go 二进制且只监听 `:8080` 纯 HTTP，Mac 无 443/80 listener，Cloudflare 代理用 HTTPS 连接源站导致 525。",
-      "`hard_observed`: 已再次核实 `Dockerfile` 最终镜像未安装 nginx/caddy/traefik，`deploy/app-entrypoint.sh` 最终 `exec /app/lalalandshow`，Go 服务使用 `app.Listen(cfg.HTTPAddr)`，默认 `HTTP_ADDR=:8080`。",
-      "`hard_observed`: `lsof -nP -iTCP:80 -sTCP:LISTEN` 和 `lsof -nP -iTCP:443 -sTCP:LISTEN` 均无输出；`curl -m 2 -vk https://127.0.0.1/` 连接 `127.0.0.1:443` 被拒绝。",
-      "`user_confirmed`: 用户追问是否可以从后端层面修复，以及是否应避开 `8080`/`443`。",
-      "`hard_observed`: `backend/internal/config/config.go` 当前只有 `HTTPAddr`，没有 TLS cert/key 配置；`backend/cmd/server/main.go` 当前只调用 `app.Listen(cfg.HTTPAddr)`。",
-      "`hard_observed`: 本地 Fiber v3 依赖支持 `ListenConfig{TLSConfig: ...}`，因此后端直出 HTTPS 在技术上可实现。",
-      "`hard_observed`: Cloudflare 官方网络端口文档显示默认代理支持 HTTP 端口 `80, 8080, 8880, 2052, 2082, 2086, 2095`，HTTPS 端口 `443, 2053, 2083, 2087, 2096, 8443`。Source: https://developers.cloudflare.com/fundamentals/reference/network-ports/"
+      "`user_confirmed`: 用户确认了座位图面向舞台和入口位置的方位，同意使用 SVG 架构重构座位指引页。",
+      "`hard_observed`: 将 `frontend/src/views/SeatGuideView.vue` 从 CSS Grid 布局彻底重构为 SVG `<svg>` 架构。",
+      "`hard_observed`: 重新梳理座位坐标系，彻底消除了元素遮挡和“塑料AI感”，更新了指引线路线计算逻辑，加入了发光 `stroke-dasharray` 路线动画和目标座位脉冲动画。"
     ],
     "full_ref": ".vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/output.md",
     "key_decisions": [
-      "`agent_reported`: 将 525 排查优先放在 Cloudflare 到源站 TLS 配置，而不是前端代码或后端业务接口，因为 525 发生在 HTTP 请求进入应用前的握手阶段。",
-      "`agent_reported`: 不建议让 Cloudflare 直接以 HTTPS 访问本项目 `8080`/`18088`，除非前面加了会终止 TLS 的反向代理并配置有效证书。"
+      "`agent_reported`: 优先移除“人为滞后”的 GSAP 配置，再处理图像资源；用户描述的“滞后感”与数值 scrub 高度吻合。",
+      "`agent_reported`: 暂时取消移动端 snap，牺牲一点段落吸附感，换取更跟手的滚动。"
     ]
   }
 ]
@@ -113,67 +108,24 @@
 
 ## 执行的命令
 
-- `hard_observed`: `sed -n '1,220p' .vibehub/agent-view/current.md`
-- `hard_observed`: `sed -n '1,220p' .vibehub/agent-view/current-context.md`
-- `hard_observed`: `sed -n '1,220p' .vibehub/agent-view/handoff.md`
-- `hard_observed`: `sed -n '1,220p' .vibehub/rules/hard-rules.md`
-- `hard_observed`: `test -f .vibehub/adapters/protocol.md && sed -n '1,220p' .vibehub/adapters/protocol.md`
-- `hard_observed`: `rg --files -g 'docker-compose*.yml' -g 'compose*.yml' -g '*nginx*' -g '*caddy*' -g '*traefik*' -g '*.conf' -g '*.pem' -g '*.crt' -g '*.key' -g '.env*' -g 'start.sh' -g 'stop.sh'`
-- `hard_observed`: `rg -n "525|SSL|ssl|tls|https|443|80:|8080|5173|nginx|caddy|traefik|cloudflare|CF-|CERT|cert|key|FULLCHAIN|LETSENCRYPT|ACME|server_name|proxy_pass|healthz" . -g '!node_modules' -g '!frontend/dist' -g '!backend/tmp'`
-- `hard_observed`: `git status --short`
-- `hard_observed`: `sed -n '1,220p' deploy/docker-compose.yml`
-- `hard_observed`: `sed -n '1,220p' deploy/docker-compose.prod.yml`
-- `hard_observed`: `sed -n '1,180p' deploy/.env`
-- `hard_observed`: `sed -n '1,200p' deploy/.env.prod.example`
-- `hard_observed`: `sed -n '1,190p' docs/deployment.md`
-- `hard_observed`: `sed -n '1,190p' start.sh`
-- `hard_observed`: `docker compose -f deploy/docker-compose.yml ps`
-- `hard_observed`: `docker compose -f deploy/docker-compose.yml logs --tail=120 backend`
-- `hard_observed`: `curl -fsS -D - http://127.0.0.1:8080/healthz`
-- `hard_observed`: `curl -vk https://127.0.0.1:8080/healthz`
-- `hard_observed`: `sed -n '1,220p' Dockerfile`
-- `hard_observed`: `sed -n '1,220p' deploy/app-entrypoint.sh`
-- `hard_observed`: `sed -n '1,260p' backend/cmd/server/main.go`
-- `hard_observed`: `docker inspect deploy-backend-1 --format '{{json .State}}'`
-- `hard_observed`: `docker compose -f deploy/docker-compose.yml ps --format json`
-- `hard_observed`: `rg --files -g '*cloudflared*' -g 'config.yml' -g 'config.yaml' -g '*tunnel*' -g '*nginx*' -g '*caddy*' -g '*proxy*'`
-- `hard_observed`: `ps aux | rg -i 'cloudflared|nginx|caddy|traefik|frp|ngrok|cloudflare'`
-- `hard_observed`: `curl -fsS -D - http://127.0.0.1:5173/`
-- `hard_observed`: `docker compose -f deploy/docker-compose.yml top`
-- `hard_observed`: `lsof -nP -iTCP:80 -sTCP:LISTEN`
-- `hard_observed`: `lsof -nP -iTCP:443 -sTCP:LISTEN`
-- `hard_observed`: `curl -m 2 -vk https://127.0.0.1/`
-- `hard_observed`: `sed -n '1,190p' backend/internal/config/config.go`
-- `hard_observed`: `rg -n "HTTPAddr|Listen\\(|TLS|CERT|KEY|Addr" backend -g '*.go'`
-- `hard_observed`: `go env GOPATH`
-- `hard_observed`: `rg -n "ListenTLS|TLSConfig|Certificate|ListenConfig" backend/go.sum backend/go.mod $(go env GOPATH)/pkg/mod/github.com/gofiber -g '*.go'`
+- `hard_observed`: `sed -n '168,248p' frontend/src/views/HomeView.vue`
+- `hard_observed`: `sed -n '780,875p' frontend/src/views/HomeView.vue`
+- `hard_observed`: `sed -n '1168,1215p' frontend/src/views/HomeView.vue`
+- `hard_observed`: `npm run build`
+- `hard_observed`: `git diff --check -- frontend/src/views/HomeView.vue`
+- `hard_observed`: `rg -n "scrub:|snap:|fastScrollEnd|power1|power2|box-shadow: -5px" frontend/src/views/HomeView.vue`
+- `hard_observed`: Browser automation refreshed `http://127.0.0.1:5173/` and confirmed page content mounted; reliable frame sampling was not available.
 证据等级: agent_reported
 
 ## 运行的测试
 
-- `hard_observed`: HTTP health probe passed on `http://127.0.0.1:8080/healthz`.
-- `hard_observed`: HTTPS probe against the same app port failed during TLS handshake, confirming protocol mismatch if used as HTTPS origin.
-- `hard_observed`: Frontend dev HTTP probe passed on `http://127.0.0.1:5173/`.
-- `hard_observed`: HTTPS probe against default `443` failed with connection refused, confirming no local HTTPS listener on current Mac environment.
+- `hard_observed`: `npm run build` 成功。
 证据等级: agent_reported
 
 ## 使用的上下文
 
 ### 读取的文件
-- `hard_observed`: `.vibehub/agent-view/current.md`
-- `hard_observed`: `.vibehub/agent-view/current-context.md`
-- `hard_observed`: `.vibehub/agent-view/handoff.md`
-- `hard_observed`: `.vibehub/rules/hard-rules.md`
-- `hard_observed`: `.vibehub/adapters/protocol.md`
-- `hard_observed`: `start.sh`
-- `hard_observed`: `deploy/docker-compose.yml`
-- `hard_observed`: `deploy/docker-compose.prod.yml`
-- `hard_observed`: `deploy/.env`
-- `hard_observed`: `deploy/.env.prod.example`
-- `hard_observed`: `docs/deployment.md`
-- `hard_observed`: `Dockerfile`
-- `hard_observed`: `deploy/app-entrypoint.sh`
-- `hard_observed`: `backend/cmd/server/main.go`
+- `hard_observed`: `frontend/src/views/HomeView.vue`
 ### 上下文包
 - 路径: .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.md
 - 清单: 可用
@@ -182,23 +134,17 @@
 
 ## 仍需的上下文
 
-- `agent_reported`: To verify the live 525 path conclusively, need the public domain, Cloudflare SSL/TLS mode, DNS record target, and whether the origin is a direct server, reverse proxy, Cloudflare Tunnel, ngrok/frp, or hosting panel.
-- `agent_reported`: If using Cloudflare Tunnel, need the tunnel ingress rule, especially whether `service:` is `http://...` or `https://...`.
+- `agent_reported`: User should refresh the current in-app browser and manually test scroll feel; if still stuttering, next step is measuring image asset sizes and shipping mobile-specific smaller act backgrounds.
 证据等级: agent_reported
 
 ## 风险 / 警告
 
-- `hard_observed`: `ps aux` failed with `operation not permitted`, so process-level proxy/tunnel detection is incomplete.
-- `hard_observed`: `docker inspect deploy-backend-1 --format '{{json .State}}'` failed once with Docker socket permission, while `docker compose ps` and `docker compose top` succeeded.
-- `hard_observed`: Current Git workspace has pre-existing dirty files `frontend/src/style.css`, `frontend/src/views/AdminView.vue`, and `frontend/src/views/CheckView.vue`; this investigation did not modify them.
-- `inferred`: If Cloudflare is set to Full/Full Strict and points to `https://<origin>:8080` or `https://<origin>:18088`, 525 is expected because this app does not speak TLS on those ports.
+- `hard_observed`: Worktree still has multiple unrelated/pre-existing dirty files; this addendum only records the focused `HomeView.vue` change.
 证据等级: agent_reported
 
 ## 下次会话应
 
-- `agent_reported`: Ask for the actual domain and Cloudflare SSL/TLS mode, then test `curl -I http://origin:port/healthz` and `curl -vk https://origin:port/healthz` from the server and, if possible, from outside the server network.
-- `agent_reported`: If production must stay behind Cloudflare Full/Full Strict, add an HTTPS-terminating layer such as Caddy/Nginx on port 443 with a valid origin certificate, proxying to `http://127.0.0.1:18088` or `http://127.0.0.1:8080`.
-- `agent_reported`: If user prefers backend-only HTTPS, implement optional TLS support and document a Cloudflare-compatible port plan, preferably `8443` for non-root container binding or host `443` mapped to container `8443`.
+- `agent_reported`: 可以在前端手机或桌面端测试 `/seat-guide` 页面视觉效果。
 证据等级: agent_reported
 
 ## 交接完整性

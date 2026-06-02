@@ -38,7 +38,7 @@ async function loadTicketPage() {
       }
     }
   } catch (e: any) {
-    error.value = e?.response?.data?.error || e?.response?.data?.message || '取得票券資訊失敗'
+    error.value = e?.response?.data?.error || e?.response?.data?.message || '票券載入失敗'
   } finally {
     loading.value = false
   }
@@ -70,7 +70,7 @@ function bookingRelationLabel(booking: Booking) {
 
 function bookingHint(booking: Booking) {
   if (booking.student_id === auth.student?.student_id) return '可前往選座頁查看位置、換座或取消。'
-  return '僅顯示代約座位資訊；入場 QR Code 只能由該學號本人查看。'
+  return '僅顯示座位資訊；入場 QR Code 須由該學號本人登入查看。'
 }
 
 function ticketSeatText(ticket: TicketResponse) {
@@ -99,6 +99,30 @@ function showTime(ticket?: TicketResponse) {
 function relationLabel(ticket: TicketResponse) {
   return ticket.owned_by_viewer ? '本人票券' : '代訂座位'
 }
+
+function bookingGuideRoute(booking: Booking) {
+  return {
+    path: '/seat-guide',
+    query: {
+      zone: booking.zone || '',
+      row: booking.row_no ? String(booking.row_no) : '',
+      col: booking.col_no ? String(booking.col_no) : '',
+      student: booking.student_id,
+    },
+  }
+}
+
+function ticketGuideRoute(ticket: TicketResponse) {
+  return {
+    path: '/seat-guide',
+    query: {
+      zone: ticket.seat.zone,
+      row: String(ticket.seat.row_no),
+      col: String(ticket.seat.col_no),
+      student: ticket.holder.student_id,
+    },
+  }
+}
 </script>
 
 <template>
@@ -109,7 +133,7 @@ function relationLabel(ticket: TicketResponse) {
       <header class="ticket-hero">
         <p class="caption">票券資訊</p>
         <h1>La La Land</h1>
-        <p>票券資訊與入場 QR Code</p>
+        <p>你的票券與入場 QR Code</p>
         <div v-if="!loading && stage !== 'before_open'" class="ticket-actions">
           <router-link to="/seats" class="btn-primary">管理座位</router-link>
           <button class="btn-outline" type="button" @click="loadTicketPage">重新整理</button>
@@ -131,7 +155,7 @@ function relationLabel(ticket: TicketResponse) {
         <div class="closed-card">
           <p class="state-kicker">預約狀態</p>
           <h2>預約尚未開放</h2>
-        <p>目前還不能選座或查看票券。開放後，這裡會顯示本人座位與代訂座位。</p>
+        <p>預約開放後，這裡會顯示你的座位與代訂座位。</p>
         </div>
       </div>
 
@@ -139,7 +163,7 @@ function relationLabel(ticket: TicketResponse) {
         <p class="state-title">目前沒有預約座位</p>
         <p>先完成座位預約，預約截止後會在這裡產生入場 QR Code。</p>
         <router-link v-if="stage === 'open'" to="/seats" class="btn-primary">前往預約</router-link>
-        <p v-else class="muted-text">預約已截止，若資料有誤請聯絡現場工作人員。</p>
+        <p v-else class="muted-text">預約已截止，若有問題請聯絡現場工作人員。</p>
       </div>
 
       <div v-else-if="!canShowQR" class="ticket-grid pending-grid">
@@ -148,15 +172,18 @@ function relationLabel(ticket: TicketResponse) {
           <h2>{{ booking.student_id }}</h2>
           <p>{{ bookingSeatText(booking) }}</p>
           <small>{{ bookingHint(booking) }}</small>
-          <router-link to="/seats" class="manage-link">
-            {{ booking.student_id === auth.student?.student_id ? '查看或換座' : '查看或取消代約' }}
+          <router-link v-if="booking.student_id === auth.student?.student_id" to="/seats" class="manage-link">
+            查看或換座
+          </router-link>
+          <router-link :to="bookingGuideRoute(booking)" class="manage-link">
+            座位指引
           </router-link>
         </article>
       </div>
 
       <div v-else-if="tickets.length === 0" class="state-panel">
         <p class="state-title">票券尚未產生</p>
-        <p>已查到預約紀錄，但入場票還沒有生成完成。請稍後重新整理，或聯絡現場工作人員。</p>
+        <p>已查到預約紀錄，但入場票尚未生成。請稍後重新整理，或聯絡現場工作人員。</p>
         <button class="btn-outline" @click="loadTicketPage">重新整理</button>
       </div>
 
@@ -171,6 +198,7 @@ function relationLabel(ticket: TicketResponse) {
             <div class="seat-block">
               <span>座位</span>
               <strong>{{ ticketSeatText(ticket) }}</strong>
+              <router-link :to="ticketGuideRoute(ticket)" class="seat-guide-link">座位指引</router-link>
             </div>
           </div>
 
@@ -186,8 +214,7 @@ function relationLabel(ticket: TicketResponse) {
             <div v-if="ticket.owned_by_viewer && ticket.qr_token" class="qr-box" v-html="qrSvg(ticket.qr_token)"></div>
             <div v-else class="qr-private">
               <span>QR 僅本人可見</span>
-              <p>代約人只能查看座位資訊；請對方使用自己的學號登入查看入場 QR Code。</p>
-              <router-link to="/seats" class="manage-link compact">管理座位</router-link>
+              <p>代約人無法查看 QR Code，請對方使用本人學號登入。</p>
             </div>
           </div>
         </article>
@@ -328,6 +355,21 @@ function relationLabel(ticket: TicketResponse) {
   margin-top: 4px;
   color: #fff4cf;
   font-size: 20px;
+}
+
+.seat-guide-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  margin-top: 10px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 244, 207, 0.2);
+  border-radius: 999px;
+  color: #fff4cf;
+  background: rgba(255, 244, 207, 0.06);
+  text-decoration: none;
+  font-size: 12px;
 }
 
 .ticket-cut {

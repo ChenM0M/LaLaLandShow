@@ -8,6 +8,10 @@ import ScrollTrigger from 'gsap/ScrollTrigger'
 
 gsap.registerPlugin(ScrollTrigger)
 
+// Track which act pages are near the viewport for GPU layer promotion
+const visibleActs = ref<Set<string>>(new Set())
+let actObserver: IntersectionObserver | null = null
+
 const auth = useAuthStore()
 const config = ref<PublicConfig | null>(null)
 const countdownParts = ref({ d: '0', h: '00', m: '00', s: '00', open: false })
@@ -34,7 +38,7 @@ const acts: ActPage[] = [
     title: '高架橋堵車',
     color: '#F6C048',
     quote: 'What is his problem? I should go.',
-    desc: '烈日下的 LA 高架橋，壅塞車流忽然變成一場奔跑的開場舞。Mia 與 Seb 第一次擦肩，城市的躁動被唱成金色浪潮。',
+    desc: 'LA 高架橋，塞車，大太陽。一聲喇叭之後，所有人跳出車門開始唱歌——Mia 和 Seb 擦身而過。城市的躁動，金色的開場。',
     song: 'Another Day of Sun',
     image: '/assets/images/lalaland-act-freeway.jpg'
   },
@@ -44,7 +48,7 @@ const acts: ActPage[] = [
     title: '宿舍派對',
     color: '#F24E8A',
     quote: "Mia, how'd the audition go?",
-    desc: '試鏡失利後的夜晚被朋友拉進派對。鏡前換裝、墨鏡與人群，把一次低落推向新的可能。',
+    desc: '試鏡又沒上。室友把她拽去派對——換衣服、戴墨鏡，把挫敗感丟在家裡。今晚說不定會不一樣。',
     song: 'Someone in the Crowd',
     image: '/assets/images/lalaland-act-party.jpg'
   },
@@ -54,8 +58,8 @@ const acts: ActPage[] = [
     title: '海邊派對',
     color: '#2FC7D9',
     quote: 'I remember you. I can admit that.',
-    desc: '海風與樂隊把兩個人重新推回同一個節拍。鋼琴從背景裡站出來，第一次認真看見彼此。',
-    song: '樂隊表演曲',
+    desc: '海邊的派對，80 年代翻唱曲。Seb 在台上彈鍵盤，Mia 在人群裡認出他——那個在餐廳彈聖誕歌被開除的傢伙。',
+    song: 'Sk8er Boi',
     image: '/assets/images/lalaland-act-pier.jpg'
   },
   {
@@ -63,8 +67,8 @@ const acts: ActPage[] = [
     label: '第四幕',
     title: '街頭漫步',
     color: '#6157D8',
-    quote: 'Thank you.',
-    desc: '街燈、花束、一次不經意的牽手轉圈。洛杉磯短暫變得安靜，像只為兩個人留出的舞台。',
+    quote: 'What a waste of a lovely night.',
+    desc: '深夜的 Griffith 公園，路燈把影子拉得很長。她差點走掉，他追上去——然後兩個人在星空下轉圈。',
     image: '/assets/images/lalaland-act-hilldance.jpg'
   },
   {
@@ -73,7 +77,7 @@ const acts: ActPage[] = [
     color: '#D96A36',
     title: '公寓夜話',
     quote: "We should call it Seb's.",
-    desc: '溫暖的公寓裡，俱樂部的名字第一次被寫下。愛情暫時擁有了形狀，夢想也擁有了地址。',
+    desc: '公寓的鋼琴前，Seb 彈著一段旋律。Mia 說就叫 Seb\'s 吧——還沒開張的爵士俱樂部，名字先有了。',
     song: 'City of Stars',
     image: '/assets/images/lalaland-act-piano.jpg'
   },
@@ -83,7 +87,7 @@ const acts: ActPage[] = [
     title: '衝突與試鏡',
     color: '#445E9C',
     quote: "I've dropped out for six years just for this fantasy.",
-    desc: '拒信、錯過的演出、電話裡的爭吵讓現實變得鋒利。也正是在裂縫裡，Mia 唱出那份近乎笨拙的堅持。',
+    desc: '拒信又來了。Seb 的巡演撞上 Mia 的獨角戲，電話那頭吵到沉默。最低谷的時候，Mia 站在試鏡間，唱了一首關於姑媽的歌。',
     song: 'The Fools Who Dream',
     image: '/assets/images/lalaland-act-audition.jpg'
   },
@@ -93,7 +97,7 @@ const acts: ActPage[] = [
     title: '告別',
     color: '#F4B860',
     quote: "I'm always gonna love you.",
-    desc: '巴黎的電話響起，他們做出最溫柔也最難的決定。放手並不是否認愛，而是承認夢同樣真實。',
+    desc: '巴黎來了一通電話。他要巡演，她要去法國——沒有誰對誰錯，只是方向不一樣了。',
     image: '/assets/images/lalaland-act-farewell.jpg'
   },
   {
@@ -102,7 +106,7 @@ const acts: ActPage[] = [
     title: "五年後 · Seb's",
     color: '#233A8B',
     quote: "Welcome to Seb's.",
-    desc: '燈牌終於亮起，鋼琴聲把另一種人生輕輕翻開。那不是重來，而是一次無聲的相望。',
+    desc: '五年後。Seb\'s 的招牌終於亮了。她走進來，他坐在鋼琴前——一個眼神，把沒能發生的那些年全部過了一遍。',
     song: 'Epilogue',
     image: '/assets/images/lalaland-act-jazzclub.jpg'
   },
@@ -167,18 +171,42 @@ function mountFadeObserver() {
   })
 }
 
+function mountActObserver() {
+  // Only promote act-pages to GPU layers when they're within 1 viewport of being visible
+  actObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      const key = (entry.target as HTMLElement).dataset.act || ''
+      if (entry.isIntersecting) {
+        visibleActs.value.add(key)
+      } else {
+        visibleActs.value.delete(key)
+      }
+    })
+  }, { rootMargin: '100% 0px 100% 0px', threshold: 0 })
+
+  document.querySelectorAll<HTMLElement>('.act-page').forEach((el) => {
+    actObserver?.observe(el)
+  })
+}
+
 function mountScrollMotion() {
   mediaMatch = gsap.matchMedia()
 
   // The horizontal accordion stacking effect
   mediaMatch.add('(min-width: 769px)', () => {
     const pages = gsap.utils.toArray<HTMLElement>('.act-page')
+    const stackOffset = 40
+    const maxStackOffset = 220
+    const contents = pages.map((page) => page.querySelector('.act-page__content'))
     
-    // Cards start off-screen right. Width is dynamically reduced to leave a visible edge.
     gsap.set(pages, { 
       xPercent: (i) => i === 0 ? 0 : 100,
-      width: (i) => i === 0 ? '100vw' : `calc(100vw - ${i * 45}px)`
+      x: 0,
+      width: (i) => i === 0 ? '100vw' : `calc(100vw - ${Math.min(i * stackOffset, maxStackOffset)}px)`,
+      zIndex: (i) => i + 1,
+      force3D: true,
     })
+    gsap.set(contents, { autoAlpha: (i) => i === 0 ? 1 : 0 })
 
     const tl = gsap.timeline({
       scrollTrigger: {
@@ -186,19 +214,31 @@ function mountScrollMotion() {
         start: 'top top',
         end: `+=${pages.length * 1000}`,
         pin: true,
-        scrub: 1,
-        anticipatePin: 1
+        scrub: 0.6,
+        anticipatePin: 1,
+        fastScrollEnd: true,
+        invalidateOnRefresh: true,
       }
     })
 
     pages.forEach((page, i) => {
       if (i === 0) return
+      tl.to(pages[i - 1].querySelector('.act-page__content'), {
+        autoAlpha: 0,
+        ease: 'none',
+        duration: 0.2,
+      }, '+=0.08')
       tl.to(page, {
         xPercent: 0,
-        x: 0, // Explicitly reset any x value
+        x: 0,
         ease: 'none',
         duration: 1
-      }, '+=0.2')
+      }, '<0.12')
+      tl.to(page.querySelector('.act-page__content'), {
+        autoAlpha: 1,
+        ease: 'none',
+        duration: 0.22,
+      }, '<0.64')
     })
 
     tl.to({}, { duration: 1.2 })
@@ -211,17 +251,24 @@ function mountScrollMotion() {
         trigger: '.hero',
         start: 'top top',
         end: 'bottom top',
-        scrub: 1,
+        scrub: true,
       },
     })
   })
 
   mediaMatch.add('(max-width: 768px)', () => {
     const pages = gsap.utils.toArray<HTMLElement>('.act-page')
+    const stackOffset = 10
+    const maxStackOffset = 72
+    const contents = pages.map((page) => page.querySelector('.act-page__content'))
     gsap.set(pages, { 
       xPercent: (i) => i === 0 ? 0 : 100,
-      width: (i) => i === 0 ? '100vw' : `calc(100vw - ${i * 14}px)`
+      x: 0,
+      width: (i) => i === 0 ? '100vw' : `calc(100vw - ${Math.min(i * stackOffset, maxStackOffset)}px)`,
+      zIndex: (i) => i + 1,
+      force3D: true,
     })
+    gsap.set(contents, { autoAlpha: (i) => i === 0 ? 1 : 0 })
 
     const tl = gsap.timeline({
       scrollTrigger: {
@@ -229,25 +276,31 @@ function mountScrollMotion() {
         start: 'top top',
         end: `+=${pages.length * 980}`,
         pin: true,
-        scrub: 0.85,
+        scrub: 0.6,
         anticipatePin: 1,
-        snap: {
-          snapTo: 1 / Math.max(1, pages.length - 1),
-          duration: { min: 0.18, max: 0.38 },
-          delay: 0.08,
-          ease: 'power2.out',
-        },
+        fastScrollEnd: true,
+        invalidateOnRefresh: true,
       }
     })
 
     pages.forEach((page, i) => {
       if (i === 0) return
+      tl.to(pages[i - 1].querySelector('.act-page__content'), {
+        autoAlpha: 0,
+        ease: 'none',
+        duration: 0.18,
+      }, '+=0.18')
       tl.to(page, {
         xPercent: 0,
         x: 0,
-        ease: 'power1.inOut',
+        ease: 'none',
         duration: 1.1
-      }, '+=0.32')
+      }, '<0.14')
+      tl.to(page.querySelector('.act-page__content'), {
+        autoAlpha: 1,
+        ease: 'none',
+        duration: 0.2,
+      }, '<0.76')
     })
 
     tl.to({}, { duration: 1.6 })
@@ -266,12 +319,14 @@ onMounted(async () => {
 
   await nextTick()
   mountFadeObserver()
+  mountActObserver()
   mountScrollMotion()
 })
 
 onUnmounted(() => {
   if (countdownTimer) clearInterval(countdownTimer)
   fadeObserver?.disconnect()
+  actObserver?.disconnect()
   mediaMatch?.revert()
   ScrollTrigger.getAll().forEach((trigger) => trigger.kill())
 })
@@ -293,7 +348,7 @@ onUnmounted(() => {
       <div class="hero-shade" aria-hidden="true"></div>
 
       <div class="hero-content fade-up">
-        <p class="eyebrow hero-eyebrow">樂來越愛你</p>
+        <p class="eyebrow hero-eyebrow">爱乐之城</p>
         <h1>La La Land</h1>
         <p class="hero-subtitle">一封寫給所有孤獨逐夢者的情書</p>
         <blockquote>當兩個追夢者在城市的燈火裡相遇，遺憾也會發出星光。</blockquote>
@@ -319,10 +374,10 @@ onUnmounted(() => {
       <section id="synopsis" class="synopsis fade-up">
         <div class="synopsis-inner">
           <p class="kicker">Story Book</p>
-          <h2>把電影的九段心跳，翻成舞台上的九頁。</h2>
+          <h2>電影有九幕，舞台也是。</h2>
           <p>
-            忠於原片的九幕敘事，以舞台語言重新演繹 Mia 與 Sebastian 的相遇、相愛與相望。
-            從高架橋的壅塞到 Seb's 的重逢，我們用色彩、音樂、肢體和光線講述屬於這個舞台的《樂來越愛你》。
+            從 LA 高架橋到爵士酒吧，九段故事、九個顏色。
+            用身體、用音樂、用燈光，把 Mia 和 Seb 的軌跡重新走一次。
           </p>
         </div>
 
@@ -339,13 +394,25 @@ onUnmounted(() => {
       </section>
 
       <section id="flip-book" class="flip-book" aria-label="九幕翻頁書">
+        <div class="scroll-cue" aria-hidden="true">
+          <span>向下滑动</span>
+          <i></i>
+        </div>
         <article
           v-for="act in acts"
           :key="act.key"
           class="act-page"
+          :class="{ 'act-page--active': visibleActs.has(act.key) }"
           :data-act="act.key"
-          :style="{ '--act-color': act.color, '--act-image': `url(${act.image})` }"
+          :style="{ '--act-color': act.color }"
         >
+          <img
+            class="act-page__bg"
+            :src="act.image"
+            :alt="`${act.label} ${act.title}`"
+            loading="lazy"
+            decoding="async"
+          />
           <div class="act-page__content">
             <span class="act-label" :style="{ color: act.color, borderColor: act.color }">{{ act.label }}</span>
             <h2>{{ act.title }}</h2>
@@ -359,7 +426,7 @@ onUnmounted(() => {
       <section id="songs" class="songs fade-up">
         <div class="section-heading">
           <p class="kicker">Songs</p>
-          <h2>曲目像城市的路燈，一首一首亮起來。</h2>
+          <h2>每首歌都是一幕的顏色。</h2>
         </div>
         <div class="song-list">
           <div
@@ -380,7 +447,7 @@ onUnmounted(() => {
     <section id="rehearsal" class="rehearsal fade-up">
       <div class="section-heading">
         <p class="kicker">Rehearsal</p>
-        <h2>排練場照牆</h2>
+        <h2>排練現場</h2>
       </div>
       <div class="masonry">
         <figure
@@ -401,7 +468,7 @@ onUnmounted(() => {
     <section id="cast" class="cast fade-up">
       <div class="section-heading">
         <p class="kicker">Cast & Crew</p>
-        <h2>演出的人，也是在追夢的人。</h2>
+        <h2>台上台下，都是我們。</h2>
       </div>
       <div class="credits-container fade-up">
         <div class="credits-column">
@@ -410,7 +477,7 @@ onUnmounted(() => {
             <dt>Mia</dt><dd>楊宓霓</dd>
             <dt>Sebastian</dt><dd>呂宜蓁</dd>
             <dt>鋼琴獨奏</dt><dd>王子亮</dd>
-            <dt>舞蹈</dt><dd>呂依潔、孫和璐、陳伯韜、呂宜蓁、沈睿維、<br>陳菱菲、陳采葳、張若妤、張睿祺、林芷雲、<br>崔以諾、簡毓蓁、姜秉銓、姜柔竹、陳思帆</dd>
+            <dt>舞蹈</dt><dd>呂依潔、孫和璐、陳伯韜、呂宜蓁、沈睿維、陳菱菲、陳采葳、張若妤、張睿祺、林芷雲、崔以諾、簡毓蓁、姜秉銓、姜柔竹、陳思帆</dd>
             <dt>舍友</dt><dd>陳菱菲、陳采葳、陳思帆</dd>
             <dt>派對樂隊主唱</dt><dd>呂俞霈</dd>
             <dt>派對觀眾</dt><dd>郭舒喬、呂依潔、孫和璐</dd>
@@ -434,7 +501,7 @@ onUnmounted(() => {
             <dt>ppt</dt><dd>李姍如</dd>
             <dt>網站</dt><dd>羅章鋭</dd>
             <dt>宣傳</dt><dd>陳思帆</dd>
-            <dt>後勤</dt><dd>蒯乃安、陳靖元、黃盈偉、黃浩宇、申紹東、<br>陳永軒、姜秉銓、高巧芸、張翊婕</dd>
+            <dt>後勤</dt><dd>蒯乃安、陳靖元、黃盈偉、黃浩宇、申紹東、陳永軒、姜秉銓、高巧芸、張翊婕</dd>
           </dl>
           
           <h3 class="credits-title" style="margin-top: 48px;">🏫 指導單位</h3>
@@ -445,8 +512,8 @@ onUnmounted(() => {
         </div>
       </div>
       <div class="credits-thanks fade-up">
-        感謝每一位台前幕後的你我，<br>
-        讓這場夢，發生了。
+        謝謝每一個台上台下的人——<br>
+        這齣戲是真的了。
       </div>
     </section>
 
@@ -454,7 +521,7 @@ onUnmounted(() => {
       <div class="stars" aria-hidden="true"></div>
       <div class="final-cta__inner fade-up">
         <p class="kicker">Final Call</p>
-        <h2>今晚，把座位留給星光。</h2>
+        <h2>還有一個位子，留給想來的人。</h2>
         <router-link :to="ctaTarget" class="cta-button cta-button--dark">
           <span aria-hidden="true">★</span>
           預約觀演
@@ -498,8 +565,12 @@ onUnmounted(() => {
   inset: 0;
   z-index: 9999;
   pointer-events: none;
-  opacity: 0.045;
+  opacity: 0.035;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* Prevent the grain layer from triggering recomposition on every scroll frame */
+  will-change: auto;
+  contain: strict;
+  content-visibility: auto;
 }
 
 .hero {
@@ -745,26 +816,85 @@ onUnmounted(() => {
   /* Removed padding so cards fill the screen entirely */
 }
 
+.scroll-cue {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(5.2rem, 9vh, 6.4rem);
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.62rem;
+  padding: 0.56rem 0.78rem;
+  border: 1px solid rgba(255, 243, 215, 0.18);
+  border-radius: 999px;
+  background: rgba(7, 10, 34, 0.72);
+  color: rgba(255, 243, 215, 0.76);
+  font-family: var(--font-ui);
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  transform: translateX(-50%);
+  pointer-events: none;
+  /* Removed backdrop-filter — expensive during scroll-scrub animation */
+}
+
+.scroll-cue i {
+  width: 1.05rem;
+  height: 1.7rem;
+  border: 1px solid rgba(255, 243, 215, 0.46);
+  border-radius: 999px;
+  position: relative;
+}
+
+.scroll-cue i::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0.28rem;
+  width: 0.25rem;
+  height: 0.25rem;
+  border-radius: 50%;
+  background: #fff3d7;
+  transform: translateX(-50%);
+  animation: scroll-dot 1.35s ease-in-out infinite;
+}
+
 .act-page {
   --act-color: var(--star);
-  --act-image: none;
   position: absolute;
   top: 0;
   right: 0;
   left: auto;
+  width: 100vw;
   height: 100vh;
   display: flex;
   align-items: center;
-  justify-content: flex-end; /* Content pushed right */
+  justify-content: flex-start;
   padding: 8vh 9vw;
-  background:
-    linear-gradient(90deg, rgba(12, 15, 48, 0.16), rgba(12, 15, 48, 0.08)),
-    var(--act-image);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  box-shadow: -20px 0 50px rgba(13, 8, 50, 0.68); /* Shadow to separate layers */
-  will-change: transform, width;
+  background: #080b24;
+  box-shadow: -10px 0 26px rgba(13, 8, 50, 0.32);
+  backface-visibility: hidden;
+  contain: layout paint style;
+  transform: translateZ(0);
+  /* Only promote to GPU layer when near viewport — managed by actObserver */
+  will-change: auto;
+  overflow: hidden;
+}
+
+/* Promote to GPU layer only when near viewport */
+.act-page--active {
+  will-change: transform;
+}
+
+.act-page__bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  z-index: -1;
+  /* Prevent image decode from blocking main thread */
+  content-visibility: auto;
 }
 
 .act-page::before {
@@ -772,18 +902,33 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(to left, rgba(13, 15, 50, 0.84) 0%, rgba(13, 15, 50, 0.45) 46%, rgba(13, 15, 50, 0.1) 100%),
-    linear-gradient(180deg, transparent 0%, rgba(13, 15, 50, 0.16) 62%, rgba(13, 15, 50, 0.72) 100%);
+    linear-gradient(90deg, rgba(8, 10, 34, 0.88) 0%, rgba(8, 10, 34, 0.66) 34%, rgba(8, 10, 34, 0.14) 72%, rgba(8, 10, 34, 0.28) 100%),
+    linear-gradient(180deg, rgba(8, 10, 34, 0.12) 0%, rgba(8, 10, 34, 0.1) 58%, rgba(8, 10, 34, 0.62) 100%);
   z-index: 0;
+}
+
+.act-page::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(7vw, 72px);
+  background: linear-gradient(90deg, rgba(255, 243, 215, 0.11), transparent);
+  opacity: 0.54;
+  pointer-events: none;
 }
 
 .act-page__content {
   position: relative;
   z-index: 1;
   max-width: 34rem;
-  text-align: right;
-  padding: 1.6rem 0 1.6rem 2rem;
-  border-right: 4px solid var(--act-color);
+  text-align: left;
+  padding: 1.6rem 2rem 1.6rem 0;
+  border-left: 4px solid var(--act-color);
+  padding-left: 1.6rem;
+  text-shadow: 0 0.8rem 2.6rem rgba(0, 0, 0, 0.54);
+  contain: layout paint;
 }
 
 .act-label {
@@ -839,6 +984,9 @@ onUnmounted(() => {
   width: min(1120px, calc(100% - 2rem));
   margin: 0 auto;
   padding: 4rem 0;
+  /* Skip rendering of off-screen sections */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
 }
 
 .section-heading {
@@ -991,6 +1139,9 @@ onUnmounted(() => {
   color: var(--cream);
   margin: 0;
   line-height: 1.6;
+  word-break: keep-all;
+  overflow-wrap: normal;
+  line-break: strict;
 }
 
 .credits-thanks {
@@ -1051,6 +1202,13 @@ onUnmounted(() => {
   to { transform: translateY(-4rem); }
 }
 
+@keyframes scroll-dot {
+  0% { transform: translate(-50%, 0); opacity: 0; }
+  25% { opacity: 1; }
+  75% { opacity: 1; }
+  100% { transform: translate(-50%, 0.7rem); opacity: 0; }
+}
+
 @media (max-width: 980px) {
   .hero h1 {
     font-size: clamp(3.6rem, 12vw, 6.2rem);
@@ -1103,23 +1261,31 @@ onUnmounted(() => {
   }
 
   .act-page__content {
-    padding: 0 1.4rem 1.2rem;
-    border-right: 0;
-    border-bottom: 3px solid var(--act-color);
-    text-align: center;
+    width: 100%;
     max-width: 100%;
+    margin-right: 0;
+    padding: 0 1.25rem 1.2rem;
+    border-left: 0;
+    border-bottom: 3px solid var(--act-color);
+    text-align: left;
+    box-sizing: border-box;
+  }
+
+  .act-page {
+    align-items: flex-end;
+    justify-content: flex-start;
+    padding: 0 0 12vh;
+    box-shadow: -5px 0 14px rgba(13, 8, 50, 0.24);
   }
 
   .act-page::before {
     background:
-      linear-gradient(to top, rgba(13, 15, 50, 0.94) 0%, rgba(13, 15, 50, 0.62) 48%, rgba(13, 15, 50, 0.1) 100%);
+      linear-gradient(to top, rgba(9, 12, 36, 0.9) 0%, rgba(9, 12, 36, 0.62) 50%, rgba(9, 12, 36, 0.08) 100%);
   }
-  
-  .act-page {
-    align-items: flex-end;
-    justify-content: center;
-    padding: 0 0 12vh;
-    background-position: center;
+
+  .scroll-cue {
+    top: calc(1rem + env(safe-area-inset-top));
+    bottom: auto;
   }
 
   .time-grid {

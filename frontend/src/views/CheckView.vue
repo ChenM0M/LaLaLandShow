@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { BrowserQRCodeReader } from '@zxing/browser'
 import type { IScannerControls } from '@zxing/browser'
 import api, { checkerLogin, checkerStats, checkIn, lookupStudent, verifyQR } from '../api'
-import type { CheckerBooking, CheckerStats, CheckerVerification, Staff } from '../api'
+import type { CheckerBooking, CheckerStats, CheckerVerification, CheckinResult, Staff } from '../api'
 
+const router = useRouter()
 const username = ref(localStorage.getItem('staffUser') || 'checker')
 const password = ref('')
 const staff = ref<Staff | null>(localStorage.getItem('staffToken') ? {
@@ -15,7 +17,7 @@ const stats = ref<CheckerStats | null>(null)
 const qrToken = ref('')
 const studentId = ref('')
 const verification = ref<CheckerVerification | null>(null)
-const lastEvent = ref<any>(null)
+const lastEvent = ref<CheckinResult | null>(null)
 const loading = ref(false)
 const error = ref('')
 const videoEl = ref<HTMLVideoElement | null>(null)
@@ -30,6 +32,19 @@ let codeReader: BrowserQRCodeReader | null = null
 let statsTimer: ReturnType<typeof window.setInterval> | null = null
 
 const canForce = computed(() => /^\d{7}$/.test(studentId.value))
+const lastEventGuideRoute = computed(() => {
+  const booking = lastEvent.value?.booking
+  if (!booking) return null
+  return {
+    path: '/seat-guide',
+    query: {
+      zone: booking.zone,
+      row: String(booking.row_no),
+      col: String(booking.col_no),
+      student: booking.student_id,
+    },
+  }
+})
 
 function seatText(booking?: CheckerBooking) {
   if (!booking) return '無預約座位'
@@ -69,7 +84,7 @@ async function startScanner() {
   error.value = ''
   scanMessage.value = ''
   if (!scannerSupported.value) {
-    error.value = '此瀏覽器不支援網頁直接掃描 QR，請改用手動輸入或貼上 QR 內容。'
+    error.value = '瀏覽器不支援網頁掃描，請改用手動輸入或貼上 QR 內容。'
     return
   }
   try {
@@ -167,7 +182,7 @@ async function lookup() {
     verification.value = await lookupStudent(studentId.value)
   } catch (e: any) {
     verification.value = null
-    error.value = e?.response?.status === 404 ? '該學號無預約，可強制核准入場' : (e?.response?.data?.error || '查詢失敗')
+    error.value = e?.response?.status === 404 ? '該學號無預約，仍可強制核准入場' : (e?.response?.data?.error || '查詢失敗')
   } finally {
     loading.value = false
   }
@@ -364,6 +379,14 @@ onUnmounted(() => {
                <strong>{{ lastEvent.event.is_first_scan ? '已記錄：首次入場' : '已記錄：重複掃描' }}</strong>
                <span class="muted">{{ new Date(lastEvent.event.scanned_at).toLocaleTimeString('zh-TW', { hour12: false }) }} · ID: #{{ lastEvent.event.id }}</span>
              </div>
+             <button
+               v-if="lastEventGuideRoute"
+               class="guide-mini-btn"
+               type="button"
+               @click="router.push(lastEventGuideRoute)"
+             >
+               座位指引
+             </button>
           </div>
           
           <div class="card stack fallback-card" v-if="!scannerSupported || (!scannerActive && !verification && !studentId)">
@@ -779,6 +802,8 @@ onUnmounted(() => {
 .log-details {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-width: 0;
 }
 .log-details strong {
   font-size: 14px;
@@ -793,6 +818,24 @@ onUnmounted(() => {
   min-height: 80px;
   font-size: 12px;
   font-family: monospace;
+}
+
+.guide-mini-btn {
+  min-height: 34px;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border: 1px solid rgba(246, 178, 63, 0.34);
+  border-radius: var(--radius-md);
+  background: rgba(246, 178, 63, 0.1);
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.guide-mini-btn:hover {
+  border-color: var(--gold);
+  background: rgba(246, 178, 63, 0.18);
 }
 
 .full-width {

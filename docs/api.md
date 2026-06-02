@@ -39,22 +39,23 @@ Student identity endpoints:
   - Request: `[{"seat_id": 101, "student_id": "1234567"}]`.
   - Also accepts `{ "bookings": [...] }` for clients that prefer an envelope.
   - The request must contain 1 to 3 unique seats, 1 to 3 unique seven-digit student IDs, and must include the authenticated student.
-  - The authenticated student can manage only one active booking group at a time. A new request is rejected if the authenticated student already has an own booking or any proxy booking created by them.
+  - The authenticated student can create proxy bookings only for students who do not already have a seat. Once a proxy booking exists, that seat is managed by the target student, not by the proxy booker.
+  - The authenticated student can create a new booking batch only when they do not already have an own booking. Existing proxy bookings created earlier do not give the authenticated student ongoing release/rebook rights.
   - The authenticated student must have a completed registration profile. Proxy-booked students may be unregistered or semi-registered; missing proxy student rows are created as semi-registered records so the seat can be held first.
   - Response: `{ "bookings": [{ "seat_id": 101, "student_id": "1234567", "zone": "middle", "row_no": 1, "col_no": 1, "ticket_version": 1, "booked_at": "..." }] }`.
   - Returns `409` before `booking_open_at`, after `booking_lock_at`, after `show_start_at`, when any requested seat is locked, or when any requested seat/student is already booked; the whole batch is rolled back.
 - `POST /api/seats/release`
   - Student bearer token required.
-  - Releases the authenticated student's own booking and every proxy booking created by the authenticated student in the same transaction.
+  - Releases only the authenticated student's own booking. Proxy-booked seats must be released by the target student themselves.
   - Response: `{ "released": { ... }, "released_bookings": [{ "seat_id": 101, "student_id": "1234567", "zone": "middle", "row_no": 1, "col_no": 1, "ticket_version": 1, "booked_at": "..." }] }`.
-  - `released` is kept for older clients and points to the first released booking; `released_bookings` contains the full set.
-  - Returns `404` when the student has no own booking and no proxy booking created by them.
+  - `released` is kept for older clients and points to the released own booking; `released_bookings` contains the released own booking.
+  - Returns `404` when the student has no own booking.
   - Returns `409` after `show_start_at`.
 - `POST /api/seats/rebook`
   - Student bearer token required.
   - Request shape matches `POST /api/seats/book`.
-  - Atomically releases the authenticated student's current managed booking group and creates the newly selected group in one transaction.
-  - Use this for "重选全部" when the student wants to replace both the本人座位 and any proxy-booked seats.
+  - Atomically releases only the authenticated student's own booking and creates the newly selected booking batch in one transaction.
+  - This endpoint must not be used to replace or cancel proxy-booked seats. A proxy-booked seat belongs to the target student once created.
   - Response: `{ "released_bookings": [...], "bookings": [...] }`.
   - Returns `409` before `booking_open_at`, after `booking_lock_at`, after `show_start_at`, when any requested seat is locked, or when any requested seat/student is already booked.
 - `POST /api/seats/change`

@@ -11,10 +11,10 @@ const now = ref(Date.now())
 const auth = useAuthStore()
 
 const stateCopy: Record<WindowState['state'], { label: string; tone: string; detail: string }> = {
-  before_open: { label: '預約未開放', tone: 'warn', detail: '現在可以瀏覽劇目資訊，預約入口會在開放時間後進入選座。' },
-  open: { label: '預約開放中', tone: 'good', detail: '學生可以登入、選座、換座或釋放座位。' },
-  locked: { label: '預約已鎖定', tone: 'warn', detail: '不能新增或換座，已預約學生仍可查看票根並釋放座位。' },
-  show_started: { label: '演出已開始', tone: 'bad', detail: '預約操作已凍結，僅保留票根和驗票核驗。' },
+  before_open: { label: '預約尚未開放', tone: 'warn', detail: '可以瀏覽劇目與座位，開放時間到後即可選座。' },
+  open: { label: '預約開放中', tone: 'good', detail: '可替尚未有座位的同學代約；已有座位後由本人換座或取消。' },
+  locked: { label: '預約已截止', tone: 'warn', detail: '不能新增或換座；已有本人座位者仍可取消自己的座位。' },
+  show_started: { label: '演出已開始', tone: 'bad', detail: '預約操作已凍結，僅保留票根與驗票功能。' },
 }
 
 const milestones = computed(() => [

@@ -35,7 +35,7 @@ async function submit() {
       <div class="login-copy">
         <p class="caption">STUDENT ACCESS</p>
         <h1>La La Land</h1>
-        <p>輸入學號後即可進入預約、票券與入場資訊。</p>
+        <p>輸入學號即可預約座位與查看票券。</p>
       </div>
 
       <div class="mobile-hero-scene" aria-hidden="true"></div>

@@ -9,6 +9,7 @@ const router = createRouter({
     { path: '/register', component: () => import('../views/RegisterView.vue'), meta: { requiresAuth: true } },
     { path: '/seats', component: () => import('../views/SeatsView.vue'), meta: { requiresAuth: true, requiresCompleteProfile: true } },
     { path: '/ticket', component: () => import('../views/TicketView.vue'), meta: { requiresAuth: true, requiresCompleteProfile: true } },
+    { path: '/seat-guide', component: () => import('../views/SeatGuideView.vue'), meta: { requiresAuth: true, requiresCompleteProfile: true } },
     { path: '/status', component: () => import('../views/StatusView.vue') },
     { path: '/check', component: () => import('../views/CheckView.vue') },
     { path: '/admin', component: () => import('../views/AdminView.vue') },

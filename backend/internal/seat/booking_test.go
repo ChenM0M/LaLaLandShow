@@ -166,15 +166,6 @@ func TestServiceReleaseStoresNormalizedStudentID(t *testing.T) {
 				TicketVersion: 1,
 				BookedAt:      time.Now(),
 			},
-			{
-				SeatID:        8,
-				StudentID:     "2234567",
-				Zone:          "middle",
-				RowNo:         1,
-				ColNo:         2,
-				TicketVersion: 1,
-				BookedAt:      time.Now(),
-			},
 		},
 	}
 	service := NewService(store)
@@ -186,8 +177,8 @@ func TestServiceReleaseStoresNormalizedStudentID(t *testing.T) {
 	if result.Released.SeatID != 7 {
 		t.Fatalf("released seat = %d, want 7", result.Released.SeatID)
 	}
-	if len(result.ReleasedBookings) != 2 || result.ReleasedBookings[0].SeatID != 7 || result.ReleasedBookings[1].SeatID != 8 {
-		t.Fatalf("released bookings = %#v, want own booking followed by proxy booking", result.ReleasedBookings)
+	if len(result.ReleasedBookings) != 1 || result.ReleasedBookings[0].SeatID != 7 {
+		t.Fatalf("released bookings = %#v, want own booking only", result.ReleasedBookings)
 	}
 	if store.seenReleaseFor != "1234567" {
 		t.Fatalf("release student id = %q, want normalized id", store.seenReleaseFor)

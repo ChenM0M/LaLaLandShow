@@ -23,7 +23,14 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html { 
-  scroll-behavior: smooth;
+  /* Only enable smooth scroll when not using GSAP ScrollTrigger pinning */
+  scroll-behavior: auto;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.has-scroll-trigger) {
+    scroll-behavior: smooth;
+  }
 }
 
 /* Hide scrollbar completely for cinematic feel */

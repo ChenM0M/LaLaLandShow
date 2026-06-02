@@ -44,7 +44,7 @@ function confirmLogout() {
     </main>
 
     <!-- Global Navigation Dock -->
-    <nav v-show="!['/seats', '/register', '/admin', '/check'].includes(route.path)" class="floating-dock glass-panel">
+    <nav v-show="!['/seats', '/seat-guide', '/register', '/admin', '/check'].includes(route.path)" class="floating-dock glass-panel">
       <div class="dock-inner">
         <router-link to="/" class="nav-item">
           <span class="icon">★</span>

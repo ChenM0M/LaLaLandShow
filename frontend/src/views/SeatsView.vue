@@ -16,7 +16,6 @@ const rulesAccepted = ref(localStorage.getItem('seatRulesAccepted') === 'true')
 const selectedSeatSlots = ref<Array<Seat | null>>([null, null, null])
 const sheetExpanded = ref(true)
 const proxyStudentIds = ref<Record<number, string>>({})
-const managementMode = ref<'changeOwn' | 'replaceGroup'>('changeOwn')
 const notice = ref<{
   tone: 'info' | 'success' | 'warning' | 'danger'
   title: string
@@ -102,9 +101,7 @@ const reservedSeats = computed(() => [
   ...(myBooking.value ? [myBooking.value] : []),
   ...proxyBookings.value,
 ])
-const hasManagedBookings = computed(() => reservedSeats.value.length > 0)
-const isReplacingGroup = computed(() => hasManagedBookings.value && (!myBooking.value || managementMode.value === 'replaceGroup'))
-const isChangingOwnSeat = computed(() => Boolean(myBooking.value) && !isReplacingGroup.value)
+const isChangingOwnSeat = computed(() => Boolean(myBooking.value))
 const selectedSeats = computed(() => selectedSeatSlots.value.filter((seat): seat is Seat => seat !== null))
 const selectedSeatIds = computed(() => new Set(selectedSeats.value.map(seat => seat.seat_id)))
 const showMiniMap = computed(() => zoom.value > initialZoom.value + 0.16)
@@ -128,38 +125,34 @@ const canSubmit = computed(() => {
 })
 
 const windowBanner: Record<string, { label: string; detail: string; tone: string }> = {
-  before_open: { label: '尚未開放', detail: '座位圖可預覽，暫不能選座', tone: 'muted' },
-  open: { label: '可選座', detail: '點選白色座位加入清單', tone: 'live' },
-  locked: { label: '已截止', detail: '已預約者仍可取消座位', tone: 'warn' },
+  before_open: { label: '尚未開放', detail: '可以先看看座位圖', tone: 'muted' },
+  open: { label: '可選座', detail: '點白色座位加入清單', tone: 'live' },
+  locked: { label: '已截止', detail: '已預約本人仍可取消', tone: 'warn' },
   show_started: { label: '演出中', detail: '座位已凍結', tone: 'closed' },
 }
 
 const seatHint = computed(() => {
-  if (seats.windowState === 'before_open') return '預約尚未開放，先熟悉座位區域與視角。'
-  if (seats.windowState === 'locked') return '預約已截止；若已選座，可在上方取消目前座位。'
+  if (seats.windowState === 'before_open') return '預約尚未開放，可以先瀏覽座位分布。'
+  if (seats.windowState === 'locked') return '預約已截止；若已有本人座位，可以在上方取消。'
   if (seats.windowState === 'show_started') return '演出已開始，座位圖僅供查看。'
-  if (isReplacingGroup.value && selectedSeats.value.length === 0) return '重選全部會替換本人與代約座位；先點好新座位，再確認。'
-  if (isReplacingGroup.value) return '第 1 個座位為本人，第 2、3 個座位填代約學號。'
-  if (myBooking.value && selectedSeats.value.length === 0) return '目前是換本人座位；點選新座位後再確認。'
+  if (myBooking.value && selectedSeats.value.length === 0) return '目前是換本人座位，點選新座位後再確認。'
   if (myBooking.value) return '確認後只更換本人座位，代約座位保持不變。'
   if (selectedSeats.value.length === 0) return '最多可選 3 座；第 2、3 座需填寫代約學號。'
-  return '確認前仍可再次點擊座位取消選取。'
+  return '確認前可再次點擊座位取消選取。'
 })
 
 const selectionTitle = computed(() => {
   if (selectedSeats.value.length > 0) {
     if (isChangingOwnSeat.value) return '待確認換座'
-    if (isReplacingGroup.value) return `重選 ${selectedSeats.value.length}/3`
     return `已選 ${selectedSeats.value.length}/3`
   }
-  if (hasManagedBookings.value) return '目前座位'
+  if (reservedSeats.value.length > 0) return '目前座位'
   return '選座清單'
 })
 
 const submitLabel = computed(() => {
   if (loading.value) return loadingLabel.value || '處理中...'
   if (isChangingOwnSeat.value) return '確認換本人座位'
-  if (isReplacingGroup.value) return '確認重選全部'
   return '確認預約'
 })
 
@@ -197,7 +190,6 @@ function selectedSlotNumber(seat: Seat) {
 
 function canSelectSeat(seat: Seat) {
   if (loading.value || seats.windowState !== 'open') return false
-  if (isReplacingGroup.value) return seat.state === 'free' || seat.state === 'mine' || seat.state === 'proxy'
   return seat.state === 'free'
 }
 
@@ -213,9 +205,15 @@ function resetSelection() {
   sheetExpanded.value = true
 }
 
-function setManagementMode(mode: 'changeOwn' | 'replaceGroup') {
-  managementMode.value = mode
-  resetSelection()
+const sheetTouchStartY = ref(0)
+function onSheetTouchStart(e: TouchEvent) {
+  sheetTouchStartY.value = e.touches[0].clientY
+}
+function onSheetTouchEnd(e: TouchEvent) {
+  const deltaY = e.changedTouches[0].clientY - sheetTouchStartY.value
+  if (Math.abs(deltaY) > 20) {
+    sheetExpanded.value = deltaY < 0
+  }
 }
 
 function showNotice(next: typeof notice.value) {
@@ -247,7 +245,7 @@ function bookingErrorNotice(e: any, fallback: string) {
     return {
       tone: 'danger' as const,
       title: '連線不穩，尚未確認成功',
-      message: '這次操作沒有收到伺服器確認。請先重新整理座位圖，再確認目前座位狀態。',
+      message: '沒有收到伺服器回應，請先重整座位圖確認狀態。',
       primaryLabel: '重新整理座位圖',
       secondaryLabel: '稍後再試',
     }
@@ -256,7 +254,7 @@ function bookingErrorNotice(e: any, fallback: string) {
     return {
       tone: 'danger' as const,
       title: '登入狀態已失效',
-      message: '請重新登入後再操作，避免用過期身分送出預約。',
+      message: '請重新登入後再操作。',
       primaryLabel: '重新登入',
       secondaryLabel: '知道了',
     }
@@ -264,8 +262,8 @@ function bookingErrorNotice(e: any, fallback: string) {
   if (status === 429) {
     return {
       tone: 'warning' as const,
-      title: '操作太密集了',
-      message: '系統正在保護搶座窗口。座位狀態已嘗試更新，請等幾秒後再送出一次。',
+      title: '操作太頻繁',
+      message: '系統正在保護搶座，稍候幾秒再試。座位狀態已更新。',
       primaryLabel: '重新整理座位圖',
       secondaryLabel: '知道了',
     }
@@ -273,8 +271,8 @@ function bookingErrorNotice(e: any, fallback: string) {
   if (raw.includes('already booked')) {
     return {
       tone: 'warning' as const,
-      title: '座位剛被搶走了',
-      message: '你選的座位或代約學號已在剛才被其他人成功預約。座位圖已嘗試刷新，請重新選擇可用座位。',
+      title: '座位剛被預約',
+      message: '你選的座位或代約學號已被其他人預約。座位圖已更新，請重新選擇。',
       primaryLabel: '重新整理座位圖',
       secondaryLabel: '知道了',
     }
@@ -283,7 +281,7 @@ function bookingErrorNotice(e: any, fallback: string) {
     return {
       tone: 'info' as const,
       title: '預約尚未開放',
-      message: '現在只能查看座位圖，正式開放後才可以送出預約。',
+      message: '目前只能查看座位圖，開放後即可預約。',
       primaryLabel: '重新整理座位圖',
       secondaryLabel: '知道了',
     }
@@ -292,7 +290,7 @@ function bookingErrorNotice(e: any, fallback: string) {
     return {
       tone: 'warning' as const,
       title: '預約已截止',
-      message: '目前不能新增、重選或換座；如已有座位，只能依規則取消。',
+      message: '不能新增或換座了；已有本人座位者只能取消自己的座位。',
       primaryLabel: '重新整理座位圖',
       secondaryLabel: '知道了',
     }
@@ -301,7 +299,7 @@ function bookingErrorNotice(e: any, fallback: string) {
     return {
       tone: 'warning' as const,
       title: '座位已凍結',
-      message: '演出已開始或座位已進入凍結狀態，不能再變更預約。',
+      message: '演出已開始，座位不能再變更。',
       primaryLabel: '重新整理座位圖',
       secondaryLabel: '知道了',
     }
@@ -309,8 +307,8 @@ function bookingErrorNotice(e: any, fallback: string) {
   if (raw.includes('locked')) {
     return {
       tone: 'warning' as const,
-      title: '座位暫不可選',
-      message: '你選的座位剛被鎖定或暫停使用。座位圖已嘗試刷新，請改選其他座位。',
+      title: '座位暫時不可選',
+      message: '你選的座位已被鎖定。座位圖已更新，請改選其他座位。',
       primaryLabel: '重新整理座位圖',
       secondaryLabel: '知道了',
     }
@@ -319,7 +317,7 @@ function bookingErrorNotice(e: any, fallback: string) {
     return {
       tone: 'warning' as const,
       title: '資料尚未完成',
-      message: '本人資料必須完整才能預約；若是代約對象，請確認學號正確並請對方完成資料。',
+      message: '個人資料需要補齊才能預約。若是代約對象，請確認對方也已完成資料。',
       primaryLabel: '去補資料',
       secondaryLabel: '知道了',
     }
@@ -327,15 +325,15 @@ function bookingErrorNotice(e: any, fallback: string) {
   if (status === 404) {
     return {
       tone: 'warning' as const,
-      title: '狀態已改變',
-      message: '座位或預約紀錄已不存在。系統已嘗試更新座位圖，請依最新狀態操作。',
+      title: '座位或紀錄已不存在',
+      message: '座位可能已被釋放。座位圖已更新，請依最新狀態操作。',
       primaryLabel: '重新整理座位圖',
       secondaryLabel: '知道了',
     }
   }
   return {
     tone: 'danger' as const,
-    title: '操作沒有完成',
+    title: '操作未完成',
     message: raw || fallback,
     primaryLabel: '重新整理座位圖',
     secondaryLabel: '知道了',
@@ -370,7 +368,7 @@ async function handleNoticePrimary() {
     showNotice({
       tone: 'danger',
       title: '座位圖暫時無法更新',
-      message: '目前連線不穩，請稍後再試。系統沒有收到新的成功預約確認。',
+      message: '網路不穩，請稍後再試。',
       primaryLabel: '重新整理座位圖',
       secondaryLabel: '知道了',
     })
@@ -561,8 +559,8 @@ async function clickSeat(seat: Seat, event: MouseEvent) {
   if (!canSelectSeat(seat)) return
   error.value = ''
 
-  if (seat.state === 'mine' && !isReplacingGroup.value) {
-    error.value = '如需取消目前座位，請使用上方「取消預約」。'
+  if (seat.state === 'mine') {
+    error.value = '如需取消座位，請使用上方「取消預約」。'
     return
   }
 
@@ -582,22 +580,19 @@ async function clickSeat(seat: Seat, event: MouseEvent) {
   }
 
   if (selectedSeats.value.length >= 3) {
-    error.value = '最多一次預約 3 個座位。'
+    error.value = '一次最多預約 3 個座位。'
     return
   }
 
   const emptySlot = selectedSeatSlots.value.findIndex(item => item === null)
   if (emptySlot === -1) return
   selectedSeatSlots.value[emptySlot] = seat
-  if (isReplacingGroup.value && seat.state === 'proxy' && seat.student_id) {
-    proxyStudentIds.value[seat.seat_id] = seat.student_id
-  }
   sheetExpanded.value = true
   focusElement(event.currentTarget as HTMLElement)
 }
 
 async function cancelBooking() {
-  if (reservedSeats.value.length === 0) return
+  if (!myBooking.value) return
   error.value = ''
   notice.value = null
   loading.value = true
@@ -607,8 +602,8 @@ async function cancelBooking() {
     resetSelection()
     showNotice({
       tone: 'success',
-      title: '預約已取消',
-      message: '你管理的座位已釋放，座位圖已更新。',
+      title: '本人預約已取消',
+      message: '你的本人座位已釋放；代約座位仍由該學號本人管理。',
       primaryLabel: '知道了',
     })
   } catch (e: any) {
@@ -630,7 +625,7 @@ async function submitSelection() {
   error.value = ''
   notice.value = null
   loading.value = true
-  loadingLabel.value = isChangingOwnSeat.value ? '換座中...' : (isReplacingGroup.value ? '重選中...' : '預約中...')
+  loadingLabel.value = isChangingOwnSeat.value ? '換座中...' : '預約中...'
   try {
     if (isChangingOwnSeat.value) {
       await seats.changeSeat(selectedSeats.value[0].seat_id)
@@ -641,14 +636,21 @@ async function submitSelection() {
           student_id: index === 0 ? auth.student!.student_id : proxyStudentIds.value[seat.seat_id],
         } : null)
         .filter((booking): booking is { seat_id: number; student_id: string } => booking !== null)
-      if (isReplacingGroup.value) {
-        await seats.rebook(bookings)
-      } else {
-        await seats.book(bookings)
-      }
+      await seats.book(bookings)
     }
+    const guideSeat = selectedSeatSlots.value[0]
     resetSelection()
-    router.push('/ticket')
+    router.push(guideSeat
+      ? {
+          path: '/seat-guide',
+          query: {
+            zone: guideSeat.zone,
+            row: String(guideSeat.row_no),
+            col: String(guideSeat.col_no),
+            student: auth.student.student_id,
+          },
+        }
+      : '/ticket')
   } catch (e: any) {
     const nextNotice = bookingErrorNotice(e, isChangingOwnSeat.value ? '換座失敗，請重新選擇' : '預約失敗，請重新選擇')
     showNotice(nextNotice)
@@ -787,7 +789,7 @@ onMounted(async () => {
     showNotice({
       tone: 'danger',
       title: '座位圖載入失敗',
-      message: '目前無法取得最新座位狀態。請重新整理後再操作，避免用過期座位圖送出預約。',
+      message: '暫時無法取得座位狀態，請重整後再試。',
       primaryLabel: '重新整理座位圖',
       secondaryLabel: '稍後再試',
     })
@@ -814,10 +816,10 @@ onUnmounted(() => {
           <span class="caption">Seat Guide</span>
           <h1>選座前請確認規則</h1>
           <div class="rules-grid">
-            <span>最多一次預約 3 座</span>
-            <span>第 2、3 座須填寫代約學號</span>
+            <span>一次最多預約 3 個座位</span>
+            <span>第 2、3 個座位需要填寫代約學號</span>
             <span>白色座位可選，灰色座位不可選</span>
-            <span>鎖定後只能釋放，不能新增或換座</span>
+            <span>只能代約尚未有座位的同學，完成後由本人管理</span>
           </div>
           <button class="btn-primary" type="button" @click="acceptRules">進入選座</button>
         </section>
@@ -967,12 +969,14 @@ onUnmounted(() => {
 
     <Transition name="slide-up">
       <section v-if="rulesAccepted" class="bottom-sheet" :class="{ expanded: selectedSeats.length > 0 && sheetExpanded }">
-        <div class="sheet-grabber" aria-hidden="true"></div>
+        <button class="sheet-grabber-area" type="button" aria-label="切換面板" @click="sheetExpanded = !sheetExpanded" @touchstart="onSheetTouchStart" @touchend="onSheetTouchEnd">
+          <div class="sheet-grabber" aria-hidden="true"></div>
+        </button>
         <div class="sheet-head">
-          <button class="sheet-title" type="button" @click="sheetExpanded = !sheetExpanded">
+          <div class="sheet-title">
             <span class="caption">{{ selectionTitle }}</span>
             <strong>{{ seatHint }}</strong>
-          </button>
+          </div>
           <button
             v-if="selectedSeats.length > 0"
             class="mini-action"
@@ -984,29 +988,11 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <div v-if="hasManagedBookings && seats.windowState === 'open'" class="mode-switch" role="group" aria-label="座位管理模式">
-          <button
-            v-if="myBooking"
-            type="button"
-            :class="{ active: isChangingOwnSeat }"
-            @click="setManagementMode('changeOwn')"
-          >
-            換本人座位
-          </button>
-          <button
-            type="button"
-            :class="{ active: isReplacingGroup }"
-            @click="setManagementMode('replaceGroup')"
-          >
-            重選全部
-          </button>
-        </div>
-
         <p v-if="error" class="error-msg">{{ error }}</p>
 
         <div v-if="reservedSeats.length > 0 && selectedSeats.length === 0" class="reserved-list">
           <article
-            v-for="(seat, index) in reservedSeats"
+            v-for="seat in reservedSeats"
             :key="seat.seat_id"
             class="reserved-row"
             :class="{ own: seat.state === 'mine', proxy: seat.state === 'proxy' }"
@@ -1023,16 +1009,7 @@ onUnmounted(() => {
               :disabled="loading"
               @click="cancelBooking"
             >
-              {{ loading ? '處理中' : (proxyBookings.length > 0 ? '取消全部' : '取消') }}
-            </button>
-            <button
-              v-else-if="!myBooking && index === 0"
-              class="mini-action danger"
-              type="button"
-              :disabled="loading"
-              @click="cancelBooking"
-            >
-              {{ loading ? '處理中' : '取消代約' }}
+              {{ loading ? '處理中' : '取消本人' }}
             </button>
           </article>
         </div>
@@ -1570,10 +1547,23 @@ onUnmounted(() => {
   backdrop-filter: blur(20px);
 }
 
+.sheet-grabber-area {
+  width: 100%;
+  padding: 10px 0;
+  margin: -10px auto 2px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .sheet-grabber {
   width: 42px;
   height: 4px;
-  margin: 0 auto 12px;
   border-radius: 999px;
   background: rgba(255, 243, 215, 0.28);
 }
@@ -1597,7 +1587,7 @@ onUnmounted(() => {
   background: transparent;
   color: inherit;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
 }
 
 .sheet-title strong {

@@ -3,8 +3,8 @@
 Task: T-20260529133755-69e7bd66
 Run: R-20260529133755-405932d7
 Phase: Align
-Generated at: 2026-06-01T04:42:32Z
-Source commit: 4b8e1ad
+Generated at: 2026-06-02T06:38:51Z
+Source commit: f3c4b1f
 
 ## Instructions
 
@@ -42,17 +42,14 @@ Report files read, commands run, decisions made, and unresolved risks.
   {
     "capability": "align",
     "completed": [
-      "`user_confirmed`: 2026-06-01 用户反馈 `./start.sh` 执行后像是“莫名其妙死掉”，要求完善启动脚本。",
-      "`hard_observed`: 已检查 `start.sh`，确认旧脚本使用 `docker-compose up -d --build` 后立即退出，只启动 Docker 后端栈，没有启动前端，也没有健康检查或可选日志跟随。",
-      "`hard_observed`: 已增强 `start.sh`：默认启动 Docker 后端栈并等待 `/healthz`，随后以前台方式启动 Vite 前端；新增 `--no-frontend`、`--logs`、`--no-build`、`--help` 选项。",
-      "`hard_observed`: 已补充 Docker Compose v1/v2 自动选择、`.env` 自动创建、端口读取、`compose ps` 状态输出、后端健康探测失败时打印 backend 最近日志、前端依赖缺失时给出明确提示。",
-      "`hard_observed`: 已修复 `--no-build` 与 `set -u` 组合下空数组展开导致的 `BUILD_ARGS[@]: unbound variable`。"
+      "`user_confirmed`: 用户确认了座位图面向舞台和入口位置的方位，同意使用 SVG 架构重构座位指引页。",
+      "`hard_observed`: 将 `frontend/src/views/SeatGuideView.vue` 从 CSS Grid 布局彻底重构为 SVG `<svg>` 架构。",
+      "`hard_observed`: 重新梳理座位坐标系，彻底消除了元素遮挡和“塑料AI感”，更新了指引线路线计算逻辑，加入了发光 `stroke-dasharray` 路线动画和目标座位脉冲动画。"
     ],
     "full_ref": ".vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/output.md",
     "key_decisions": [
-      "`agent_reported`: 将 `start.sh` 的默认行为改为“后端容器后台运行 + 前端 Vite 前台运行”，解决用户看到脚本结束后误以为服务死亡的问题，同时保留 `--no-frontend` 用于旧的只启动后端行为。",
-      "`agent_reported`: 健康检查使用后端已有 `/healthz`，避免用业务接口作为启动成功判断。",
-      "`agent_reported`: 不在启动脚本里自动执行 `npm install`，避免在网络受限或依赖未确认时产生不可控安装；缺依赖时只给出明确下一步。"
+      "`agent_reported`: 优先移除“人为滞后”的 GSAP 配置，再处理图像资源；用户描述的“滞后感”与数值 scrub 高度吻合。",
+      "`agent_reported`: 暂时取消移动端 snap，牺牲一点段落吸附感，换取更跟手的滚动。"
     ]
   }
 ]

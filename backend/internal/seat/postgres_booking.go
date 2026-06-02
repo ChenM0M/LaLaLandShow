@@ -39,7 +39,7 @@ func (s *PostgresSnapshotStore) BookSeats(ctx context.Context, actorStudentID st
 		return nil, err
 	}
 
-	if err := ensureNoExistingActorManagedBookings(ctx, tx, actorStudentID); err != nil {
+	if err := ensureNoExistingOwnBooking(ctx, tx, actorStudentID); err != nil {
 		return nil, err
 	}
 
@@ -76,7 +76,7 @@ func (s *PostgresSnapshotStore) ReleaseSeats(ctx context.Context, actorStudentID
 		return nil, err
 	}
 
-	released, err := deleteManagedBookings(ctx, tx, actorStudentID)
+	released, err := deleteOwnBooking(ctx, tx, actorStudentID)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func (s *PostgresSnapshotStore) RebookSeats(ctx context.Context, actorStudentID 
 		return RebookResult{}, err
 	}
 
-	released, err := deleteManagedBookings(ctx, tx, actorStudentID)
+	released, err := deleteOwnBooking(ctx, tx, actorStudentID)
 	if err != nil {
 		return RebookResult{}, err
 	}
@@ -273,14 +273,13 @@ WHERE student_id = $1`, actorStudentID).Scan(&actorReady); err != nil {
 	return nil
 }
 
-func ensureNoExistingActorManagedBookings(ctx context.Context, tx pgx.Tx, actorStudentID string) error {
+func ensureNoExistingOwnBooking(ctx context.Context, tx pgx.Tx, actorStudentID string) error {
 	var count int
 	if err := tx.QueryRow(ctx, `
 SELECT count(*)
 FROM seat_bookings
-WHERE student_id = $1
-   OR booked_by_student_id = $1`, actorStudentID).Scan(&count); err != nil {
-		return fmt.Errorf("check existing actor bookings: %w", err)
+WHERE student_id = $1`, actorStudentID).Scan(&count); err != nil {
+		return fmt.Errorf("check existing own booking: %w", err)
 	}
 	if count > 0 {
 		return ErrBookingConflict
@@ -355,17 +354,15 @@ ORDER BY r.ord`,
 	return bookings, nil
 }
 
-func deleteManagedBookings(ctx context.Context, tx pgx.Tx, actorStudentID string) ([]BookedSeat, error) {
+func deleteOwnBooking(ctx context.Context, tx pgx.Tx, actorStudentID string) ([]BookedSeat, error) {
 	rows, err := tx.Query(ctx, `
 WITH deleted AS (
   DELETE FROM seat_bookings b
   WHERE b.student_id = $1
-     OR b.booked_by_student_id = $1
   RETURNING b.seat_id,
             b.student_id,
             b.ticket_version,
-            b.booked_at,
-            CASE WHEN b.student_id = $1 THEN 0 ELSE 1 END AS release_order
+            b.booked_at
 )
 SELECT d.seat_id,
        d.student_id,
@@ -376,9 +373,9 @@ SELECT d.seat_id,
        d.booked_at
 FROM deleted d
 JOIN seats s ON s.seat_id = d.seat_id
-ORDER BY d.release_order, d.seat_id`, actorStudentID)
+ORDER BY d.seat_id`, actorStudentID)
 	if err != nil {
-		return nil, fmt.Errorf("delete managed bookings: %w", err)
+		return nil, fmt.Errorf("delete own booking: %w", err)
 	}
 	defer rows.Close()
 

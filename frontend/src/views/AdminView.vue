@@ -624,7 +624,7 @@ onMounted(() => {
         <div class="toolbar admin-toolbar">
           <div>
             <h2 class="h2">備份 / 復原</h2>
-            <p class="muted">復原會取代業務表，請先產生計畫並核對 token。</p>
+            <p class="muted">復原會覆蓋現有資料，先產生計畫確認 token 再執行。</p>
           </div>
           <button class="btn-primary" :disabled="loading" @click="downloadBackup">匯出備份</button>
         </div>

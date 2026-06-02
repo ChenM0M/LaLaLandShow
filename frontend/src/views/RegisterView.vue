@@ -49,7 +49,7 @@ async function submit() {
       <div class="register-copy">
         <p class="caption">STUDENT PROFILE</p>
         <h1>入場資料</h1>
-        <p>確認班級與座號後，就可以進入選座。</p>
+        <p>確認班級與座號後，即可進入選座。</p>
       </div>
 
       <div class="mobile-hero-scene" aria-hidden="true"></div>
