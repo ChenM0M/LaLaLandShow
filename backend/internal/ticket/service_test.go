@@ -64,7 +64,7 @@ func TestServiceGetReturnsSignedTicket(t *testing.T) {
 	seatNo := 18
 	store := &fakeStore{
 		record: Record{
-			StudentID:     "1234567",
+			StudentID:     "1121001",
 			ClassCode:     &classCode,
 			SeatNoInClass: &seatNo,
 			SeatID:        42,
@@ -85,11 +85,11 @@ func TestServiceGetReturnsSignedTicket(t *testing.T) {
 	service := NewService(store, "secret")
 	service.now = func() time.Time { return now }
 
-	ticket, err := service.Get(context.Background(), " 1234567 ")
+	ticket, err := service.Get(context.Background(), " 1121001 ")
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
-	if store.seenStudent != "1234567" {
+	if store.seenStudent != "1121001" {
 		t.Fatalf("student = %q, want normalized id", store.seenStudent)
 	}
 	if ticket.QRToken == "" {
@@ -99,7 +99,7 @@ func TestServiceGetReturnsSignedTicket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("VerifyQR() error = %v", err)
 	}
-	if payload.StudentID != "1234567" || payload.SeatID != 42 || payload.TicketVersion != 2 {
+	if payload.StudentID != "1121001" || payload.SeatID != 42 || payload.TicketVersion != 2 {
 		t.Fatalf("payload = %#v, want student/seat/version", payload)
 	}
 }
@@ -114,7 +114,7 @@ func TestServiceGetBlocksBeforeLock(t *testing.T) {
 	service := NewService(store, "secret")
 	service.now = func() time.Time { return now }
 
-	if _, err := service.Get(context.Background(), "1234567"); !errors.Is(err, ErrTicketNotAvailable) {
+	if _, err := service.Get(context.Background(), "1121001"); !errors.Is(err, ErrTicketNotAvailable) {
 		t.Fatalf("Get() error = %v, want %v", err, ErrTicketNotAvailable)
 	}
 }
@@ -123,7 +123,7 @@ func TestServiceGetRejectsIncompleteHolderProfile(t *testing.T) {
 	now := time.Unix(2000, 0).UTC()
 	store := &fakeStore{
 		record: Record{
-			StudentID:     "1234567",
+			StudentID:     "1121001",
 			SeatID:        42,
 			Zone:          "middle",
 			RowNo:         4,
@@ -137,7 +137,7 @@ func TestServiceGetRejectsIncompleteHolderProfile(t *testing.T) {
 	service := NewService(store, "secret")
 	service.now = func() time.Time { return now }
 
-	if _, err := service.Get(context.Background(), "1234567"); !errors.Is(err, student.ErrIncompleteProfile) {
+	if _, err := service.Get(context.Background(), "1121001"); !errors.Is(err, student.ErrIncompleteProfile) {
 		t.Fatalf("Get(incomplete profile) error = %v, want %v", err, student.ErrIncompleteProfile)
 	}
 }
@@ -146,11 +146,11 @@ func TestServiceListDoesNotExposeProxyTicketQR(t *testing.T) {
 	now := time.Unix(2000, 0).UTC()
 	classCode := "1201"
 	seatNo := 18
-	booker := "1234567"
+	booker := "1121001"
 	store := &fakeStore{
 		records: []Record{
 			{
-				StudentID:     "1234567",
+				StudentID:     "1121001",
 				ClassCode:     &classCode,
 				SeatNoInClass: &seatNo,
 				SeatID:        42,
@@ -160,7 +160,7 @@ func TestServiceListDoesNotExposeProxyTicketQR(t *testing.T) {
 				TicketVersion: 2,
 			},
 			{
-				StudentID:      "7654321",
+				StudentID:      "1122001",
 				ClassCode:      &classCode,
 				SeatNoInClass:  &seatNo,
 				SeatID:         43,
@@ -178,7 +178,7 @@ func TestServiceListDoesNotExposeProxyTicketQR(t *testing.T) {
 	service := NewService(store, "secret")
 	service.now = func() time.Time { return now }
 
-	result, err := service.List(context.Background(), "1234567")
+	result, err := service.List(context.Background(), "1121001")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -193,7 +193,7 @@ func TestServiceListDoesNotExposeProxyTicketQR(t *testing.T) {
 	if proxy.OwnedByViewer || proxy.QRToken != "" || proxy.QRPayload != nil {
 		t.Fatalf("proxy ticket QR fields = token %q payload %#v owned %v, want no QR exposure", proxy.QRToken, proxy.QRPayload, proxy.OwnedByViewer)
 	}
-	if proxy.Holder.StudentID != "7654321" || proxy.Seat.SeatID != 43 {
+	if proxy.Holder.StudentID != "1122001" || proxy.Seat.SeatID != 43 {
 		t.Fatalf("proxy ticket = %#v, want seat info only for proxied student", proxy)
 	}
 }
@@ -202,11 +202,11 @@ func TestServiceListAllowsIncompleteProxyTicketWithoutQR(t *testing.T) {
 	now := time.Unix(2000, 0).UTC()
 	classCode := "1201"
 	seatNo := 18
-	booker := "1234567"
+	booker := "1121001"
 	store := &fakeStore{
 		records: []Record{
 			{
-				StudentID:     "1234567",
+				StudentID:     "1121001",
 				ClassCode:     &classCode,
 				SeatNoInClass: &seatNo,
 				SeatID:        42,
@@ -216,7 +216,7 @@ func TestServiceListAllowsIncompleteProxyTicketWithoutQR(t *testing.T) {
 				TicketVersion: 2,
 			},
 			{
-				StudentID:      "7654321",
+				StudentID:      "1122001",
 				SeatID:         43,
 				Zone:           "left",
 				RowNo:          5,
@@ -232,7 +232,7 @@ func TestServiceListAllowsIncompleteProxyTicketWithoutQR(t *testing.T) {
 	service := NewService(store, "secret")
 	service.now = func() time.Time { return now }
 
-	result, err := service.List(context.Background(), "1234567")
+	result, err := service.List(context.Background(), "1121001")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -240,7 +240,7 @@ func TestServiceListAllowsIncompleteProxyTicketWithoutQR(t *testing.T) {
 	if proxy.QRToken != "" || proxy.QRPayload != nil || proxy.OwnedByViewer {
 		t.Fatalf("proxy ticket QR fields = token %q payload %#v owned %v, want no QR exposure", proxy.QRToken, proxy.QRPayload, proxy.OwnedByViewer)
 	}
-	if proxy.Holder.StudentID != "7654321" || proxy.Holder.ClassCode != nil || proxy.Holder.SeatNoInClass != nil {
+	if proxy.Holder.StudentID != "1122001" || proxy.Holder.ClassCode != nil || proxy.Holder.SeatNoInClass != nil {
 		t.Fatalf("proxy holder = %#v, want incomplete holder seat info only", proxy.Holder)
 	}
 }
@@ -251,7 +251,7 @@ func TestServiceImageReturnsPNG(t *testing.T) {
 	seatNo := 18
 	store := &fakeStore{
 		record: Record{
-			StudentID:     "1234567",
+			StudentID:     "1121001",
 			ClassCode:     &classCode,
 			SeatNoInClass: &seatNo,
 			SeatID:        42,
@@ -267,7 +267,7 @@ func TestServiceImageReturnsPNG(t *testing.T) {
 	service := NewService(store, "secret")
 	service.now = func() time.Time { return now }
 
-	pngBytes, err := service.Image(context.Background(), "1234567")
+	pngBytes, err := service.Image(context.Background(), "1121001")
 	if err != nil {
 		t.Fatalf("Image() error = %v", err)
 	}

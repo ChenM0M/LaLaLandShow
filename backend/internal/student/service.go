@@ -10,13 +10,14 @@ import (
 )
 
 var (
-	ErrInvalidStudentID  = errors.New("student_id must be exactly seven digits")
-	ErrInvalidProfile    = errors.New("class_code and seat_no_in_class are required")
+	ErrInvalidStudentID  = errors.New("student_id must match 110-115 + 1-4 + three digits")
+	ErrInvalidProfile    = errors.New("class_code must be 701-705 through 1201-1205; seat_no_in_class must be 1-70")
 	ErrIncompleteProfile = errors.New("student registration is incomplete")
 	ErrNotFound          = errors.New("student not found")
 )
 
-var studentIDPattern = regexp.MustCompile(`^[0-9]{7}$`)
+var studentIDPattern = regexp.MustCompile(`^11[0-5][1-4][0-9]{3}$`)
+var classCodePattern = regexp.MustCompile(`^(7|8|9|10|11|12)0[1-5]$`)
 
 type Store interface {
 	FindOrCreateStudent(ctx context.Context, studentID string) (Student, error)
@@ -107,8 +108,16 @@ func IsValidStudentID(studentID string) bool {
 	return studentIDPattern.MatchString(studentID)
 }
 
+func IsValidClassCode(classCode string) bool {
+	return classCodePattern.MatchString(strings.TrimSpace(classCode))
+}
+
+func IsValidSeatNoInClass(seatNo int) bool {
+	return seatNo >= 1 && seatNo <= 70
+}
+
 func ValidateProfile(input RegisterInput) error {
-	if strings.TrimSpace(input.ClassCode) == "" || input.SeatNoInClass <= 0 {
+	if !IsValidClassCode(input.ClassCode) || !IsValidSeatNoInClass(input.SeatNoInClass) {
 		return ErrInvalidProfile
 	}
 	return nil
@@ -116,9 +125,9 @@ func ValidateProfile(input RegisterInput) error {
 
 func HasCompleteProfile(student Student) bool {
 	return student.ClassCode != nil &&
-		strings.TrimSpace(*student.ClassCode) != "" &&
+		IsValidClassCode(*student.ClassCode) &&
 		student.SeatNoInClass != nil &&
-		*student.SeatNoInClass > 0
+		IsValidSeatNoInClass(*student.SeatNoInClass)
 }
 
 func normalizeProfile(input RegisterInput) RegisterInput {

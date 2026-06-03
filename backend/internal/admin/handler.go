@@ -31,6 +31,7 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	group.Post("/seats/:id/assign", h.assignSeat)
 	group.Post("/seats/:id/lock", h.lockSeat)
 	group.Get("/students", h.listStudents)
+	group.Get("/students/conflicts", h.listStudentSeatConflicts)
 	group.Get("/audit-logs", h.listAuditLogs)
 	group.Get("/checkin-events", h.listCheckinEvents)
 	group.Get("/dashboard", h.dashboard)
@@ -149,15 +150,28 @@ func (h *Handler) lockSeat(c fiber.Ctx) error {
 
 func (h *Handler) listStudents(c fiber.Ctx) error {
 	list, err := h.service.ListStudents(c.Context(), StudentFilter{
-		Page:      queryInt(c, "page", 1),
-		PageSize:  queryInt(c, "page_size", 50),
-		ClassCode: c.Query("class_code"),
-		Search:    c.Query("search"),
+		Page:        queryInt(c, "page", 1),
+		PageSize:    queryInt(c, "page_size", 50),
+		GradePrefix: c.Query("grade_prefix"),
+		ClassCode:   c.Query("class_code"),
+		Search:      c.Query("search"),
 	})
 	if err != nil {
 		return writeServiceError(c, err)
 	}
 	return c.JSON(list)
+}
+
+func (h *Handler) listStudentSeatConflicts(c fiber.Ctx) error {
+	conflicts, err := h.service.ListStudentSeatConflicts(c.Context(), StudentFilter{
+		GradePrefix: c.Query("grade_prefix"),
+		ClassCode:   c.Query("class_code"),
+		Search:      c.Query("search"),
+	})
+	if err != nil {
+		return writeServiceError(c, err)
+	}
+	return c.JSON(fiber.Map{"conflicts": conflicts})
 }
 
 func (h *Handler) listAuditLogs(c fiber.Ctx) error {

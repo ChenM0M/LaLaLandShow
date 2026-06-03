@@ -69,41 +69,41 @@ func TestServiceBookValidatesBatch(t *testing.T) {
 		entries []BookEntry
 		wantErr error
 	}{
-		{name: "empty batch", actor: "1234567", wantErr: ErrInvalidBookingBatch},
+		{name: "empty batch", actor: "1121001", wantErr: ErrInvalidBookingBatch},
 		{
 			name:    "too many seats",
-			actor:   "1234567",
-			entries: []BookEntry{{SeatID: 1, StudentID: "1234567"}, {SeatID: 2, StudentID: "2234567"}, {SeatID: 3, StudentID: "3234567"}, {SeatID: 4, StudentID: "4234567"}},
+			actor:   "1121001",
+			entries: []BookEntry{{SeatID: 1, StudentID: "1121001"}, {SeatID: 2, StudentID: "1121002"}, {SeatID: 3, StudentID: "1121003"}, {SeatID: 4, StudentID: "1121004"}},
 			wantErr: ErrInvalidBookingBatch,
 		},
 		{
 			name:    "invalid companion student id",
-			actor:   "1234567",
-			entries: []BookEntry{{SeatID: 1, StudentID: "1234567"}, {SeatID: 2, StudentID: "abc"}},
+			actor:   "1121001",
+			entries: []BookEntry{{SeatID: 1, StudentID: "1121001"}, {SeatID: 2, StudentID: "abc"}},
 			wantErr: ErrInvalidBookingStudentID,
 		},
 		{
 			name:    "invalid seat id",
-			actor:   "1234567",
-			entries: []BookEntry{{SeatID: 0, StudentID: "1234567"}},
+			actor:   "1121001",
+			entries: []BookEntry{{SeatID: 0, StudentID: "1121001"}},
 			wantErr: ErrInvalidSeatID,
 		},
 		{
 			name:    "duplicate seat",
-			actor:   "1234567",
-			entries: []BookEntry{{SeatID: 1, StudentID: "1234567"}, {SeatID: 1, StudentID: "2234567"}},
+			actor:   "1121001",
+			entries: []BookEntry{{SeatID: 1, StudentID: "1121001"}, {SeatID: 1, StudentID: "1121002"}},
 			wantErr: ErrDuplicateSeat,
 		},
 		{
 			name:    "duplicate student",
-			actor:   "1234567",
-			entries: []BookEntry{{SeatID: 1, StudentID: "1234567"}, {SeatID: 2, StudentID: "1234567"}},
+			actor:   "1121001",
+			entries: []BookEntry{{SeatID: 1, StudentID: "1121001"}, {SeatID: 2, StudentID: "1121001"}},
 			wantErr: ErrDuplicateStudent,
 		},
 		{
 			name:    "missing self",
-			actor:   "1234567",
-			entries: []BookEntry{{SeatID: 1, StudentID: "2234567"}},
+			actor:   "1121001",
+			entries: []BookEntry{{SeatID: 1, StudentID: "1121002"}},
 			wantErr: ErrMissingSelfBooking,
 		},
 	}
@@ -121,7 +121,7 @@ func TestServiceBookStoresNormalizedEntries(t *testing.T) {
 	store := &fakeBookingStore{
 		bookings: []BookedSeat{{
 			SeatID:        7,
-			StudentID:     "1234567",
+			StudentID:     "1121001",
 			Zone:          "middle",
 			RowNo:         1,
 			ColNo:         1,
@@ -131,9 +131,9 @@ func TestServiceBookStoresNormalizedEntries(t *testing.T) {
 	}
 	service := NewService(store)
 
-	result, err := service.Book(context.Background(), "1234567", []BookEntry{{
+	result, err := service.Book(context.Background(), "1121001", []BookEntry{{
 		SeatID:    7,
-		StudentID: " 1234567 ",
+		StudentID: " 1121001 ",
 	}})
 	if err != nil {
 		t.Fatalf("Book() error = %v", err)
@@ -141,7 +141,7 @@ func TestServiceBookStoresNormalizedEntries(t *testing.T) {
 	if len(result.Bookings) != 1 {
 		t.Fatalf("len(Bookings) = %d, want 1", len(result.Bookings))
 	}
-	if got := store.seen[0].StudentID; got != "1234567" {
+	if got := store.seen[0].StudentID; got != "1121001" {
 		t.Fatalf("stored student id = %q, want normalized id", got)
 	}
 }
@@ -159,7 +159,7 @@ func TestServiceReleaseStoresNormalizedStudentID(t *testing.T) {
 		released: []BookedSeat{
 			{
 				SeatID:        7,
-				StudentID:     "1234567",
+				StudentID:     "1121001",
 				Zone:          "middle",
 				RowNo:         1,
 				ColNo:         1,
@@ -170,7 +170,7 @@ func TestServiceReleaseStoresNormalizedStudentID(t *testing.T) {
 	}
 	service := NewService(store)
 
-	result, err := service.Release(context.Background(), " 1234567 ")
+	result, err := service.Release(context.Background(), " 1121001 ")
 	if err != nil {
 		t.Fatalf("Release() error = %v", err)
 	}
@@ -180,7 +180,7 @@ func TestServiceReleaseStoresNormalizedStudentID(t *testing.T) {
 	if len(result.ReleasedBookings) != 1 || result.ReleasedBookings[0].SeatID != 7 {
 		t.Fatalf("released bookings = %#v, want own booking only", result.ReleasedBookings)
 	}
-	if store.seenReleaseFor != "1234567" {
+	if store.seenReleaseFor != "1121001" {
 		t.Fatalf("release student id = %q, want normalized id", store.seenReleaseFor)
 	}
 }
@@ -188,7 +188,7 @@ func TestServiceReleaseStoresNormalizedStudentID(t *testing.T) {
 func TestServiceReleaseRejectsEmptyStoreResult(t *testing.T) {
 	service := NewService(&fakeBookingStore{})
 
-	if _, err := service.Release(context.Background(), "1234567"); !errors.Is(err, ErrBookingNotFound) {
+	if _, err := service.Release(context.Background(), "1121001"); !errors.Is(err, ErrBookingNotFound) {
 		t.Fatalf("Release(empty) error = %v, want %v", err, ErrBookingNotFound)
 	}
 }
@@ -203,7 +203,7 @@ func TestServiceChangeValidatesInput(t *testing.T) {
 		wantErr error
 	}{
 		{name: "invalid student", actor: "abc", seatID: 1, wantErr: ErrInvalidBookingStudentID},
-		{name: "invalid seat", actor: "1234567", seatID: 0, wantErr: ErrInvalidSeatID},
+		{name: "invalid seat", actor: "1121001", seatID: 0, wantErr: ErrInvalidSeatID},
 	}
 
 	for _, tt := range tests {
@@ -218,20 +218,20 @@ func TestServiceChangeValidatesInput(t *testing.T) {
 func TestServiceChangeStoresNormalizedInput(t *testing.T) {
 	store := &fakeBookingStore{
 		change: SeatChange{
-			Previous: BookedSeat{SeatID: 7, StudentID: "1234567", TicketVersion: 1},
-			Booking:  BookedSeat{SeatID: 8, StudentID: "1234567", TicketVersion: 2},
+			Previous: BookedSeat{SeatID: 7, StudentID: "1121001", TicketVersion: 1},
+			Booking:  BookedSeat{SeatID: 8, StudentID: "1121001", TicketVersion: 2},
 		},
 	}
 	service := NewService(store)
 
-	result, err := service.Change(context.Background(), " 1234567 ", 8)
+	result, err := service.Change(context.Background(), " 1121001 ", 8)
 	if err != nil {
 		t.Fatalf("Change() error = %v", err)
 	}
 	if result.Booking.SeatID != 8 {
 		t.Fatalf("changed seat = %d, want 8", result.Booking.SeatID)
 	}
-	if store.seenChangeFor != "1234567" {
+	if store.seenChangeFor != "1121001" {
 		t.Fatalf("change student id = %q, want normalized id", store.seenChangeFor)
 	}
 	if store.seenNewSeatID != 8 {

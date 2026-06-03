@@ -9,15 +9,18 @@ const studentId = ref('')
 const error = ref('')
 const loading = ref(false)
 
+const studentIdPattern = /^11[0-5][1-4]\d{3}$/
+
 async function submit() {
-  if (!/^\d{7}$/.test(studentId.value)) {
-    error.value = '請輸入 7 位學號'
+  const normalizedStudentId = studentId.value.trim()
+  if (!studentIdPattern.test(normalizedStudentId)) {
+    error.value = '學號格式需為 110-115 + 1-4 + 後三位數字'
     return
   }
   loading.value = true
   error.value = ''
   try {
-    await auth.login(studentId.value)
+    await auth.login(normalizedStudentId)
     router.push(auth.needRegister ? '/register' : '/seats')
   } catch (e: any) {
     error.value = e?.response?.data?.error || e?.response?.data?.message || '登入失敗，請檢查學號'
@@ -51,10 +54,10 @@ async function submit() {
           id="student-id"
           v-model="studentId"
           inputmode="numeric"
-          pattern="[0-9]*"
+          pattern="11[0-5][1-4][0-9]{3}"
           type="text"
           maxlength="7"
-          placeholder="1234567"
+          placeholder="1121001"
           autofocus
         />
         <p v-if="error" class="error-msg">{{ error }}</p>

@@ -65,12 +65,12 @@ func TestServiceLoginCreatesSemiRegisteredStudent(t *testing.T) {
 	store := newFakeStore()
 	service := NewService(store, fakeTokenIssuer{})
 
-	result, err := service.Login(context.Background(), "1234567")
+	result, err := service.Login(context.Background(), "1121001")
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
 	}
-	if result.Token != "token-for-1234567" {
-		t.Fatalf("Token = %q, want token-for-1234567", result.Token)
+	if result.Token != "token-for-1121001" {
+		t.Fatalf("Token = %q, want token-for-1121001", result.Token)
 	}
 	if !result.NeedRegister {
 		t.Fatal("NeedRegister = false, want true for first login")
@@ -81,11 +81,11 @@ func TestServiceSecondLoginKeepsCompletedProfile(t *testing.T) {
 	store := newFakeStore()
 	service := NewService(store, fakeTokenIssuer{})
 
-	if _, err := service.Login(context.Background(), "1234567"); err != nil {
+	if _, err := service.Login(context.Background(), "1121001"); err != nil {
 		t.Fatalf("Login() error = %v", err)
 	}
-	student, err := service.Register(context.Background(), "1234567", RegisterInput{
-		ClassCode:     "1103",
+	student, err := service.Register(context.Background(), "1121001", RegisterInput{
+		ClassCode:     "1104",
 		SeatNoInClass: 18,
 	})
 	if err != nil {
@@ -95,7 +95,7 @@ func TestServiceSecondLoginKeepsCompletedProfile(t *testing.T) {
 		t.Fatal("NeedRegister = true after Register(), want false")
 	}
 
-	result, err := service.Login(context.Background(), "1234567")
+	result, err := service.Login(context.Background(), "1121001")
 	if err != nil {
 		t.Fatalf("Login() second time error = %v", err)
 	}
@@ -112,14 +112,47 @@ func TestServiceRejectsInvalidStudentID(t *testing.T) {
 	}
 }
 
+func TestIsValidStudentID(t *testing.T) {
+	tests := []struct {
+		studentID string
+		want      bool
+	}{
+		{studentID: "1101001", want: true},
+		{studentID: "1123001", want: true},
+		{studentID: "1154999", want: true},
+		{studentID: "1091001", want: false},
+		{studentID: "1161001", want: false},
+		{studentID: "1125001", want: false},
+		{studentID: "1121abc", want: false},
+	}
+
+	for _, tt := range tests {
+		if got := IsValidStudentID(tt.studentID); got != tt.want {
+			t.Fatalf("IsValidStudentID(%q) = %v, want %v", tt.studentID, got, tt.want)
+		}
+	}
+}
+
 func TestValidateProfile(t *testing.T) {
-	if err := ValidateProfile(RegisterInput{ClassCode: "1103", SeatNoInClass: 18}); err != nil {
+	if err := ValidateProfile(RegisterInput{ClassCode: "1104", SeatNoInClass: 18}); err != nil {
 		t.Fatalf("ValidateProfile(valid) error = %v", err)
 	}
 	if err := ValidateProfile(RegisterInput{ClassCode: "", SeatNoInClass: 18}); !errors.Is(err, ErrInvalidProfile) {
 		t.Fatalf("ValidateProfile(empty class) error = %v, want %v", err, ErrInvalidProfile)
 	}
-	if err := ValidateProfile(RegisterInput{ClassCode: "1103"}); !errors.Is(err, ErrInvalidProfile) {
+	if err := ValidateProfile(RegisterInput{ClassCode: "1104"}); !errors.Is(err, ErrInvalidProfile) {
 		t.Fatalf("ValidateProfile(empty seat no) error = %v, want %v", err, ErrInvalidProfile)
+	}
+	if err := ValidateProfile(RegisterInput{ClassCode: "706", SeatNoInClass: 18}); !errors.Is(err, ErrInvalidProfile) {
+		t.Fatalf("ValidateProfile(invalid class) error = %v, want %v", err, ErrInvalidProfile)
+	}
+	if err := ValidateProfile(RegisterInput{ClassCode: "1205", SeatNoInClass: 71}); !errors.Is(err, ErrInvalidProfile) {
+		t.Fatalf("ValidateProfile(invalid seat no) error = %v, want %v", err, ErrInvalidProfile)
+	}
+	if !IsValidClassCode("701") || !IsValidClassCode("1205") {
+		t.Fatal("IsValidClassCode rejected a valid boundary class")
+	}
+	if IsValidClassCode("706") || IsValidClassCode("1301") {
+		t.Fatal("IsValidClassCode accepted an invalid class")
 	}
 }

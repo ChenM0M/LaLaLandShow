@@ -120,25 +120,47 @@ const songs = acts
     color: act.color,
   }))
 
-const rehearsalFrames = [
-  { src: '/assets/images/rehearsal-01.png', title: '舞段排練', caption: 'ensemble blocking' },
-  { src: '/assets/images/rehearsal-02.png', title: '鋼琴走位', caption: 'music cue' },
-  { src: '/assets/images/rehearsal-03.png', title: '燈光合成', caption: 'lighting pass' },
+const stagePhotos = [
+  { src: '/assets/images/stage-photo-1.jpg' },
+  { src: '/assets/images/stage-photo-2.jpg' },
+  { src: '/assets/images/stage-photo-3.jpg' },
 ]
 
 
 
 const ctaTarget = computed(() => (auth.token ? '/seats' : '/login'))
-const showDate = computed(() => config.value?.show_date || '2026 · 敬請期待')
 const venue = computed(() => config.value?.venue || '夢想劇場')
 
+const nowTime = ref(Date.now())
+
+const showDate = computed(() => {
+  if (!config.value) return '2026 · 敬請期待'
+
+  const now = nowTime.value
+  const openAt = config.value.booking_open_at ? new Date(config.value.booking_open_at).getTime() : 0
+  const lockAt = config.value.booking_lock_at ? new Date(config.value.booking_lock_at).getTime() : 0
+  const startAt = config.value.show_start_at ? new Date(config.value.show_start_at).getTime() : 0
+
+  const formatDate = (ts: number) => {
+    const d = new Date(ts)
+    return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`
+  }
+
+  if (openAt && now < openAt) return `${formatDate(openAt)} 預約開啟`
+  if (lockAt && now < lockAt) return `${formatDate(lockAt)} 預約截止`
+  if (startAt && now < startAt) return `${formatDate(startAt)} 演出開始`
+
+  return config.value.show_date || '2026 · 敬請期待'
+})
+
 function updateCountdown() {
+  nowTime.value = Date.now()
   if (!config.value?.booking_open_at) {
     countdownParts.value = { d: '0', h: '00', m: '00', s: '00', open: false }
     return
   }
 
-  const diff = new Date(config.value.booking_open_at).getTime() - Date.now()
+  const diff = new Date(config.value.booking_open_at).getTime() - nowTime.value
   if (diff <= 0) {
     countdownParts.value = { d: '0', h: '00', m: '00', s: '00', open: true }
     return
@@ -444,23 +466,19 @@ onUnmounted(() => {
       </section>
     </div>
 
-    <section id="rehearsal" class="rehearsal fade-up">
+    <section id="stage-photos" class="rehearsal fade-up">
       <div class="section-heading">
-        <p class="kicker">Rehearsal</p>
-        <h2>排練現場</h2>
+        <p class="kicker">Stage Photos</p>
+        <h2>精彩场照</h2>
       </div>
       <div class="masonry">
         <figure
-          v-for="(frame, index) in rehearsalFrames"
-          :key="frame.src"
+          v-for="(photo, index) in stagePhotos"
+          :key="photo.src"
           class="rehearsal-frame fade-up"
           :class="`rehearsal-frame--${index + 1}`"
         >
-          <img :src="frame.src" :alt="frame.title" loading="lazy" />
-          <figcaption>
-            <strong>{{ frame.title }}</strong>
-            <span>{{ frame.caption }}</span>
-          </figcaption>
+          <img :src="photo.src" alt="Stage Photo" loading="lazy" />
         </figure>
       </div>
     </section>

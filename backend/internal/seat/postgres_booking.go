@@ -234,9 +234,9 @@ SELECT count(*)
 FROM students
 WHERE student_id = ANY($1)
   AND class_code IS NOT NULL
-  AND btrim(class_code) <> ''
+  AND class_code ~ '^(7|8|9|10|11|12)0[1-5]$'
   AND seat_no_in_class IS NOT NULL
-  AND seat_no_in_class > 0`, studentIDs).Scan(&count); err != nil {
+  AND seat_no_in_class BETWEEN 1 AND 70`, studentIDs).Scan(&count); err != nil {
 		return fmt.Errorf("check student registration: %w", err)
 	}
 	if count != want {
@@ -257,9 +257,9 @@ ON CONFLICT (student_id) DO NOTHING`, studentIDs); err != nil {
 	var actorReady bool
 	if err := tx.QueryRow(ctx, `
 SELECT class_code IS NOT NULL
-   AND btrim(class_code) <> ''
+   AND class_code ~ '^(7|8|9|10|11|12)0[1-5]$'
    AND seat_no_in_class IS NOT NULL
-   AND seat_no_in_class > 0
+   AND seat_no_in_class BETWEEN 1 AND 70
 FROM students
 WHERE student_id = $1`, actorStudentID).Scan(&actorReady); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

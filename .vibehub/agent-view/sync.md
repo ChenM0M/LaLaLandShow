@@ -1,6 +1,6 @@
 # VibeHub 同步报告
 
-生成时间: 2026-06-02T06:38:51Z
+生成时间: 2026-06-02T07:20:59Z
 生成来源: VibeHub backend
 证据等级: mixed
 
@@ -10,10 +10,10 @@
 - 运行: R-20260529133755-405932d7
 - 阶段: align
 - Git 是否有未提交变更: true
-- 变更文件数: 36
+- 变更文件数: 37
 
-- Sync level: quick (fresh_head_aligned)
-- Sync signals: delta_t=Some(2020), delta_head=same, delta_overlap_per_mille=Some(888)
+- Sync level: deep (dirty_workspace_needs_reconcile)
+- Sync signals: delta_t=Some(725), delta_head=same, delta_overlap_per_mille=Some(702)
 
 证据等级: hard_observed
 
@@ -36,40 +36,41 @@
 - .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.md
 - .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/events.jsonl
 - .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/output.md
+- backend/internal/admin/handler.go
+- backend/internal/admin/postgres.go
+- backend/internal/admin/service.go
+- backend/internal/admin/service_test.go
+- backend/internal/auth/jwt_test.go
+- backend/internal/checker/service_test.go
+- backend/internal/seat/booking.go
 - backend/internal/seat/booking_test.go
-- backend/internal/seat/postgres_booking.go
-- backend/internal/seat/postgres_booking_test.go
+- backend/internal/seat/snapshot_test.go
+- backend/internal/student/service.go
+- backend/internal/student/service_test.go
+- backend/internal/ticket/qr_test.go
+- backend/internal/ticket/service_test.go
+- backend/migrations/0001_initial.up.sql
 - docs/api.md
 - docs/db-schema.md
-- frontend/public/assets/images/lalaland-act-audition.jpg
-- frontend/public/assets/images/lalaland-act-farewell.jpg
-- frontend/public/assets/images/lalaland-act-freeway.jpg
-- frontend/public/assets/images/lalaland-act-hilldance.jpg
-- frontend/public/assets/images/lalaland-act-jazzclub.jpg
-- frontend/public/assets/images/lalaland-act-party.jpg
-- frontend/public/assets/images/lalaland-act-piano.jpg
-- frontend/public/assets/images/lalaland-act-pier.jpg
-- frontend/src/App.vue
-- frontend/src/router/index.ts
-- frontend/src/style.css
+- frontend/src/api.ts
 - frontend/src/views/AdminView.vue
 - frontend/src/views/CheckView.vue
 - frontend/src/views/HomeView.vue
 - frontend/src/views/LoginView.vue
-- frontend/src/views/RegisterView.vue
-- frontend/src/views/SeatsView.vue
-- frontend/src/views/StatusView.vue
-- frontend/src/views/TicketView.vue
-- .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/sync/sync-20260602-060511.md
-- backend/internal/admin/postgres_window_test.go
 - frontend/src/views/SeatGuideView.vue
+- frontend/src/views/SeatsView.vue
+- .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/sync/sync-20260602-070854.md
+- backend/migrations/0003_student_id_format.up.sql
+- frontend/public/assets/images/stage-photo-1.jpg
+- frontend/public/assets/images/stage-photo-2.jpg
+- frontend/public/assets/images/stage-photo-3.jpg
 - update_time.go
 
 证据等级: hard_observed
 
 ## 需要用户确认的问题
 
-- Git 当前有 36 个变更文件。这些变更是否都属于当前 VibeHub 任务？如不是，请说明哪些需要排除或另开任务。
+- Git 当前有 37 个变更文件。这些变更是否都属于当前 VibeHub 任务？如不是，请说明哪些需要排除或另开任务。
 
 证据等级: inferred
 
@@ -83,7 +84,7 @@
 ## 警告
 
 - Git 工作区存在 VibeHub 状态之外观察到的未提交变更。
-- 循环警告：36 个变更文件已达到或超过 repeated_file_edits 阈值 8。
+- 循环警告：37 个变更文件已达到或超过 repeated_file_edits 阈值 8。
 - Event/state consistency warning: state flow.implement is 'pending' but event projection is 'active'.
 - Event/state consistency warning: state flow.plan is 'pending' but event projection is 'active'.
 

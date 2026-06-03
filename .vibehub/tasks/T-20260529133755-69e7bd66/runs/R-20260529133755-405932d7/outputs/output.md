@@ -218,6 +218,124 @@
 - `hard_observed`: `gofmt -w backend/internal/seat/postgres_booking.go backend/internal/seat/booking_test.go backend/internal/seat/postgres_booking_test.go`
 - `hard_observed`: `go test ./internal/seat` in `backend/`
 - `hard_observed`: `go test ./...` in `backend/`
+
+## Session Addendum 2026-06-02 Student ID Rules and Admin Student Filters
+
+### Completed
+- `user_confirmed`: 用户要求新增学生证学号基础检测：前三位只允许 `110-115`，第四位只允许 `1-4`，后三位为个人序号数字。
+- `hard_observed`: 后端学生证校验已从任意 7 位数字收紧为 `^11[0-5][1-4][0-9]{3}$`，并同步用于学生登录、管理员绑座、学生选座/代约、验票查找等调用路径。
+- `hard_observed`: 数据库初始迁移中的 `students_student_id_format` 约束已收紧，并新增 `backend/migrations/0003_student_id_format.up.sql` 用于已迁移环境更新约束。
+- `hard_observed`: 前端登录页、验票快查、选座代约输入、管理员强制绑定输入已添加同一学号格式基础检测或 HTML pattern。
+- `hard_observed`: 管理员学生列表接口新增 `grade_prefix` 筛选，保留 `class_code` 与 `search` 筛选，并在前端学生页提供年级、班级、搜索筛选栏。
+- `hard_observed`: 管理员后台新增 `/api/admin/students/conflicts`，按 `class_code + seat_no_in_class` 聚合重复账号，返回重复学生证号列表。
+- `hard_observed`: 管理员学生页顶部新增数量总览，显示符合笔数、本页显示、已注册、异常组数，并展示“班级座号重复”的异常检测表。
+- `hard_observed`: `docs/api.md` 与 `docs/db-schema.md` 已同步更新学生证格式与新增后台接口说明。
+
+### Not Yet Done
+- `agent_reported`: 未连接真实后端数据库做管理员登录后的数据筛选实测；本轮通过后端单元测试、前端构建和本地浏览器渲染验证。
+- `agent_reported`: VibeHub 同步问题仍未由用户确认：当前工作区存在多个本轮之前的 dirty 文件，尚未确认是否全部属于当前任务。
+
+### Key Decisions Made
+- `inferred`: 用户描述的“第二位数字只有可能 1-4”结合示例 `【112】【1】【xxx】`，实现为第四位/第二段数字只允许 `1-4`。
+- `agent_reported`: 异常检测放在后端查询中完成，避免前端只基于当前分页计算导致漏报其他页重复班级座号。
+- `agent_reported`: 年级筛选使用学生证前三位 `grade_prefix`，班级筛选使用既有 `class_code` 字段，便于和用户提供的学号结构保持一致。
+
+### Files Changed
+- `hard_observed`: `backend/internal/student/service.go`
+- `hard_observed`: `backend/internal/student/service_test.go`
+- `hard_observed`: `backend/internal/seat/booking.go`
+- `hard_observed`: `backend/internal/seat/booking_test.go`
+- `hard_observed`: `backend/internal/seat/snapshot_test.go`
+- `hard_observed`: `backend/internal/admin/handler.go`
+- `hard_observed`: `backend/internal/admin/service.go`
+- `hard_observed`: `backend/internal/admin/postgres.go`
+- `hard_observed`: `backend/internal/admin/service_test.go`
+- `hard_observed`: `backend/internal/auth/jwt_test.go`
+- `hard_observed`: `backend/internal/checker/service_test.go`
+- `hard_observed`: `backend/internal/ticket/qr_test.go`
+- `hard_observed`: `backend/internal/ticket/service_test.go`
+- `hard_observed`: `backend/migrations/0001_initial.up.sql`
+- `hard_observed`: `backend/migrations/0003_student_id_format.up.sql`
+- `hard_observed`: `frontend/src/api.ts`
+- `hard_observed`: `frontend/src/views/AdminView.vue`
+- `hard_observed`: `frontend/src/views/CheckView.vue`
+- `hard_observed`: `frontend/src/views/LoginView.vue`
+- `hard_observed`: `frontend/src/views/SeatsView.vue`
+- `hard_observed`: `docs/api.md`
+- `hard_observed`: `docs/db-schema.md`
+- `hard_observed`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/output.md`
+
+### Files Reportedly Read
+- `hard_observed`: `.vibehub/agent-view/current.md`
+- `hard_observed`: `.vibehub/agent-view/current-context.md`
+- `hard_observed`: `.vibehub/agent-view/handoff.md`
+- `hard_observed`: `.vibehub/rules/hard-rules.md`
+- `hard_observed`: `.vibehub/adapters/protocol.md`
+- `hard_observed`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.md`
+- `hard_observed`: `/Users/chenm0m/.codex/plugins/cache/openai-bundled/browser/26.527.60818/skills/control-in-app-browser/SKILL.md`
+- `hard_observed`: `backend/internal/student/service.go`
+- `hard_observed`: `backend/internal/student/handler.go`
+- `hard_observed`: `backend/internal/student/postgres.go`
+- `hard_observed`: `backend/internal/admin/service.go`
+- `hard_observed`: `backend/internal/admin/handler.go`
+- `hard_observed`: `backend/internal/admin/postgres.go`
+- `hard_observed`: `backend/internal/student/service_test.go`
+- `hard_observed`: `backend/internal/admin/service_test.go`
+- `hard_observed`: `backend/internal/seat/booking.go`
+- `hard_observed`: `backend/migrations/0001_initial.up.sql`
+- `hard_observed`: `frontend/src/api.ts`
+- `hard_observed`: `frontend/src/views/AdminView.vue`
+- `hard_observed`: `frontend/src/views/LoginView.vue`
+- `hard_observed`: `frontend/src/views/CheckView.vue`
+- `hard_observed`: `frontend/src/views/SeatsView.vue`
+- `hard_observed`: `docs/api.md`
+- `hard_observed`: `docs/db-schema.md`
+
+### Commands Run
+- `hard_observed`: `pwd && rg --files .vibehub/agent-view .vibehub/rules .vibehub/adapters | sort`
+- `hard_observed`: `git status --short`
+- `hard_observed`: `sed -n '1,220p' .vibehub/agent-view/current.md`
+- `hard_observed`: `sed -n '1,220p' .vibehub/agent-view/current-context.md`
+- `hard_observed`: `sed -n '1,220p' .vibehub/agent-view/handoff.md`
+- `hard_observed`: `sed -n '1,220p' .vibehub/rules/hard-rules.md`
+- `hard_observed`: `sed -n '1,220p' .vibehub/adapters/protocol.md`
+- `hard_observed`: `sed -n '1,260p' .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.md`
+- `hard_observed`: `sed -n '1,220p' .vibehub/workflow.yaml`
+- `hard_observed`: `sed -n '1,240p' .agents/skills/vibehub-sync/SKILL.md`
+- `hard_observed`: `vibehub sync /Users/chenm0m/LocalRepo/LaLaLandShow`
+- `hard_observed`: `rg -n "student|studentId|student_id|学号|学生证|admin|Admin|grade|class|班级|seat|座号" backend frontend/src docs -S`
+- `hard_observed`: `rg --files backend frontend/src | sort`
+- `hard_observed`: `git diff --name-only`
+- `hard_observed`: multiple `sed -n` inspections of backend admin/student files and frontend admin/login/check/seats/docs files.
+- `hard_observed`: `perl -pi -e 's/1234567/1121001/g; s/2234567/1121002/g; s/3234567/1121003/g; s/4234567/1121004/g; s/7654321/1122001/g' ...`
+- `hard_observed`: `perl -pi -e 's/1234567/1121001/g; s/seven-digit student IDs/student IDs matching 110-115 + 1-4 + three digits/g; s/seven digits/110-115 + 1-4 + three digits/g' docs/api.md docs/db-schema.md`
+- `hard_observed`: `gofmt -w backend/internal/student/service.go backend/internal/student/service_test.go backend/internal/seat/booking.go backend/internal/admin/service.go backend/internal/admin/handler.go backend/internal/admin/postgres.go backend/internal/admin/service_test.go`
+- `hard_observed`: `go test ./...` in `backend/`
+- `hard_observed`: `npm run build` in `frontend/`
+- `hard_observed`: `npm run dev -- --host 127.0.0.1` in `frontend/`
+- `hard_observed`: in-app Browser opened `http://127.0.0.1:5173/admin` and confirmed the admin student tab renders `STUDENT DIRECTORY`, `年級`, `DUPLICATE CHECK`, and `班級座號重複` with no console errors.
+- `hard_observed`: `git status --short`
+- `hard_observed`: `git diff --stat`
+
+### Tests Run
+- `hard_observed`: `go test ./...` in `backend/` passed.
+- `hard_observed`: `npm run build` in `frontend/` passed.
+- `hard_observed`: in-app Browser render check for `/admin` passed; student tab showed the new filters and duplicate-check module, with no console errors observed.
+
+### Context Still Needed
+- `agent_reported`: 需要真实后台数据来人工确认筛选结果、异常组数量和学生证重复列表是否符合实际运营预期。
+- `agent_reported`: VibeHub 同步问题仍需用户确认：当前工作区里的既有 dirty 文件是否都属于同一任务。
+
+### Warnings
+- `hard_observed`: `vibehub sync` 返回 `needs_attention`，包含 dirty workspace、HEAD mismatch、repeated file edit threshold、event/state consistency warning。
+- `hard_observed`: 本轮之前已存在 `frontend/src/views/HomeView.vue`、`frontend/src/views/SeatGuideView.vue`、图片资源和 `update_time.go` 等未提交改动；本轮未回滚它们。
+- `hard_observed`: `vibehub sync` 由 CLI 更新了 `.vibehub/state.yaml` 等 VibeHub 生成文件；本轮没有手动编辑 canonical state。
+- `agent_reported`: 新数据库迁移会收紧 `students.student_id` 约束；若现有数据库已有不符合新规则的历史学生号，迁移会失败，需要先清理数据。
+
+### Next Session Should
+- `agent_reported`: 用真实管理员账号和后端数据打开 `/admin`，测试年级、班级、搜索组合筛选以及重复班级座号列表。
+- `agent_reported`: 如生产库已有旧格式学生号，先导出并清理或修正后再执行 `0003_student_id_format`。
+- `agent_reported`: 在提交前确认本轮之外的 VibeHub/前端/资源 dirty 文件归属，避免把无关改动混进同一提交。
 - `hard_observed`: `npm --prefix frontend run build`
 - `hard_observed`: `rg -n "重选全部|重選全部|取消代約|取消全部|proxy booking created by them|managed booking group|管理整组|管理整組|已有座位只能取消|已預約者仍可取消|replace both|actor-managed proxy|managed-group" docs frontend/src backend -g '!node_modules' -g '!dist'`
 
@@ -1016,3 +1134,74 @@
 
 ### Next Session Should
 - `agent_reported`: 如果继续清理工作区，可决定是否删除、忽略或保留未跟踪的 `update_time.go`。
+
+## Session Addendum 2026-06-02 Class Bounds Correction To Grade 7
+
+### Completed
+- `user_confirmed`: 用户更正班级范围应从 7 年级开始，即 `701...`，不是从 9 年级开始。
+- `hard_observed`: 后端学生资料校验已改为允许 `701-705`、`801-805`、`901-905`、`1001-1005`、`1101-1105`、`1201-1205`，座号仍限制为 `1-70`。
+- `hard_observed`: 管理员强制绑座和学生预约前的“已完成注册”SQL 判定已同步改为 `^(7|8|9|10|11|12)0[1-5]$`。
+- `hard_observed`: 数据库初始迁移和 `0004_student_profile_bounds.up.sql` 的 `students_class_code_format` 约束已同步扩到 7、8 年级。
+- `hard_observed`: 注册页班级下拉已从 `701` 开始；管理员学生筛选年级下拉已改为 `7-12`，班级下拉已改为 `701-1205` 每级 5 班。
+- `hard_observed`: `docs/api.md` 与 `docs/db-schema.md` 已同步新班级范围。
+- `hard_observed`: in-app Browser 验证 `/admin` 学生页，年级选项包含 `7,8,9,10,11,12`，班级选项从 `701` 开始，且无 console error。
+
+### Not Yet Done
+- `agent_reported`: 未使用真实后端数据验证筛选结果数量；本轮验证范围为代码、构建、单元测试和当前浏览器渲染。
+
+### Key Decisions Made
+- `user_confirmed`: 班级范围以用户更正后的 `701` 起算。
+- `agent_reported`: 每个年级仍按“理论上不超过 5 个班”执行，即每级 `01-05`。
+- `agent_reported`: 座号限制继续保持 `1-70`。
+
+### Files Changed
+- `hard_observed`: `backend/internal/student/service.go`
+- `hard_observed`: `backend/internal/student/service_test.go`
+- `hard_observed`: `backend/internal/admin/postgres.go`
+- `hard_observed`: `backend/internal/seat/postgres_booking.go`
+- `hard_observed`: `backend/migrations/0001_initial.up.sql`
+- `hard_observed`: `backend/migrations/0004_student_profile_bounds.up.sql`
+- `hard_observed`: `frontend/src/views/RegisterView.vue`
+- `hard_observed`: `frontend/src/views/AdminView.vue`
+- `hard_observed`: `docs/api.md`
+- `hard_observed`: `docs/db-schema.md`
+- `hard_observed`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/output.md`
+
+### Files Reportedly Read
+- `hard_observed`: `.vibehub/agent-view/current.md`
+- `hard_observed`: `.vibehub/agent-view/current-context.md`
+- `hard_observed`: `.vibehub/agent-view/handoff.md`
+- `hard_observed`: `.vibehub/rules/hard-rules.md`
+- `hard_observed`: `.vibehub/adapters/protocol.md`
+- `hard_observed`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.md`
+- `hard_observed`: `backend/internal/student/service.go`
+- `hard_observed`: `frontend/src/views/RegisterView.vue`
+- `hard_observed`: `frontend/src/views/AdminView.vue`
+- `hard_observed`: `docs/api.md`
+- `hard_observed`: `docs/db-schema.md`
+
+### Commands Run
+- `hard_observed`: `vibehub sync /Users/chenm0m/LocalRepo/LaLaLandShow`
+- `hard_observed`: `rg -n "gradeOptions|studentFilters|ClassCode|SeatNo|ValidateProfile|ErrInvalidProfile|students_profile|class_code|seat_no_in_class" backend/internal frontend/src docs backend/migrations -S`
+- `hard_observed`: `gofmt -w backend/internal/student/service.go backend/internal/student/service_test.go backend/internal/admin/postgres.go backend/internal/seat/postgres_booking.go`
+- `hard_observed`: `rg -n "\\^\\(9\\|10|grade_prefix.*9|class_code must|students_class_code_format|701-705|706" backend/internal frontend/src docs backend/migrations -S`
+- `hard_observed`: `go test ./...` in `backend/`
+- `hard_observed`: `npm run build` in `frontend/`
+- `hard_observed`: in-app Browser inspected `http://127.0.0.1:5173/admin` and verified admin student filters.
+- `hard_observed`: `git status --short`
+- `hard_observed`: `git diff --stat -- backend/internal/student/service.go backend/internal/student/service_test.go backend/internal/admin/postgres.go backend/internal/seat/postgres_booking.go backend/migrations/0001_initial.up.sql backend/migrations/0004_student_profile_bounds.up.sql frontend/src/views/RegisterView.vue frontend/src/views/AdminView.vue docs/api.md docs/db-schema.md`
+
+### Tests Run
+- `hard_observed`: `go test ./...` in `backend/` passed.
+- `hard_observed`: `npm run build` in `frontend/` passed.
+- `hard_observed`: in-app Browser render check passed for `/admin` student filters with 7th grade options.
+
+### Context Still Needed
+- `agent_reported`: 真实管理员数据仍有助于确认筛选统计和重复检测结果是否符合运营预期。
+
+### Warnings
+- `hard_observed`: `vibehub sync` 仍返回 `needs_attention`，因为工作区有大量未提交变更与 VibeHub event/state consistency warning。
+- `agent_reported`: 新迁移的 `NOT VALID` 约束会先创建约束但不回扫旧数据；如需强制校验历史数据，需要清理后执行 `VALIDATE CONSTRAINT`。
+
+### Next Session Should
+- `agent_reported`: 用真实管理员数据测试 `7-12` 年级筛选和 `701-1205` 班级筛选。

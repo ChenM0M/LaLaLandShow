@@ -13,7 +13,7 @@ func TestManagerGenerateAndParseStudentToken(t *testing.T) {
 	now := time.Unix(1000, 0)
 	manager := NewManager("test-secret", time.Hour)
 
-	token, err := manager.GenerateStudentToken("1234567", now)
+	token, err := manager.GenerateStudentToken("1121001", now)
 	if err != nil {
 		t.Fatalf("GenerateStudentToken() error = %v", err)
 	}
@@ -22,8 +22,8 @@ func TestManagerGenerateAndParseStudentToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseStudentToken() error = %v", err)
 	}
-	if claims.Subject != "1234567" {
-		t.Fatalf("claims.Subject = %q, want 1234567", claims.Subject)
+	if claims.Subject != "1121001" {
+		t.Fatalf("claims.Subject = %q, want 1121001", claims.Subject)
 	}
 	if claims.Role != "student" {
 		t.Fatalf("claims.Role = %q, want student", claims.Role)
@@ -69,7 +69,7 @@ func TestManagerRejectsTamperedToken(t *testing.T) {
 	now := time.Unix(1000, 0)
 	manager := NewManager("test-secret", time.Hour)
 
-	token, err := manager.GenerateStudentToken("1234567", now)
+	token, err := manager.GenerateStudentToken("1121001", now)
 	if err != nil {
 		t.Fatalf("GenerateStudentToken() error = %v", err)
 	}
@@ -84,7 +84,7 @@ func TestManagerRejectsExpiredToken(t *testing.T) {
 	now := time.Unix(1000, 0)
 	manager := NewManager("test-secret", time.Hour)
 
-	token, err := manager.GenerateStudentToken("1234567", now)
+	token, err := manager.GenerateStudentToken("1121001", now)
 	if err != nil {
 		t.Fatalf("GenerateStudentToken() error = %v", err)
 	}
@@ -96,7 +96,7 @@ func TestManagerRejectsExpiredToken(t *testing.T) {
 
 func TestStudentMiddlewareAcceptsStreamQueryToken(t *testing.T) {
 	manager := NewManager("test-secret", time.Hour)
-	token, err := manager.GenerateStudentToken("1234567", time.Now())
+	token, err := manager.GenerateStudentToken("1121001", time.Now())
 	if err != nil {
 		t.Fatalf("GenerateStudentToken() error = %v", err)
 	}
@@ -125,7 +125,7 @@ func TestStudentMiddlewareAcceptsStreamQueryToken(t *testing.T) {
 
 func TestStudentMiddlewareRejectsQueryTokenOutsideStream(t *testing.T) {
 	manager := NewManager("test-secret", time.Hour)
-	token, err := manager.GenerateStudentToken("1234567", time.Now())
+	token, err := manager.GenerateStudentToken("1121001", time.Now())
 	if err != nil {
 		t.Fatalf("GenerateStudentToken() error = %v", err)
 	}

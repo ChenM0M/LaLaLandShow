@@ -10,12 +10,13 @@ Student identity endpoints:
 
 - `POST /api/student/login`
   - Public.
-  - Request: `{ "student_id": "1234567" }`.
+  - Request: `{ "student_id": "1121001" }`.
   - Creates a semi-registered student row on first login.
   - Response: `{ "token": "...", "student": { ... }, "need_register": true|false, "pending_notice": null|{ ... } }`.
 - `POST /api/student/register`
   - Student bearer token required.
   - Request: `{ "class_code": "1103", "seat_no_in_class": 18, "display_name": "optional" }`.
+  - `class_code` must be `701-705`, `801-805`, `901-905`, `1001-1005`, `1101-1105`, or `1201-1205`; `seat_no_in_class` must be `1-70`.
   - Completes or updates the student profile.
   - Response: `{ "student": { ... }, "need_register": false }`.
 - `GET /api/student/me`
@@ -36,18 +37,18 @@ Student identity endpoints:
   - The stream emits a `ready` event on connect and emits `seat_changed` events after successful booking, release, and change writes.
 - `POST /api/seats/book`
   - Student bearer token required.
-  - Request: `[{"seat_id": 101, "student_id": "1234567"}]`.
+  - Request: `[{"seat_id": 101, "student_id": "1121001"}]`.
   - Also accepts `{ "bookings": [...] }` for clients that prefer an envelope.
-  - The request must contain 1 to 3 unique seats, 1 to 3 unique seven-digit student IDs, and must include the authenticated student.
+  - The request must contain 1 to 3 unique seats, 1 to 3 unique student IDs matching 110-115 + 1-4 + three digits, and must include the authenticated student.
   - The authenticated student can create proxy bookings only for students who do not already have a seat. Once a proxy booking exists, that seat is managed by the target student, not by the proxy booker.
   - The authenticated student can create a new booking batch only when they do not already have an own booking. Existing proxy bookings created earlier do not give the authenticated student ongoing release/rebook rights.
   - The authenticated student must have a completed registration profile. Proxy-booked students may be unregistered or semi-registered; missing proxy student rows are created as semi-registered records so the seat can be held first.
-  - Response: `{ "bookings": [{ "seat_id": 101, "student_id": "1234567", "zone": "middle", "row_no": 1, "col_no": 1, "ticket_version": 1, "booked_at": "..." }] }`.
+  - Response: `{ "bookings": [{ "seat_id": 101, "student_id": "1121001", "zone": "middle", "row_no": 1, "col_no": 1, "ticket_version": 1, "booked_at": "..." }] }`.
   - Returns `409` before `booking_open_at`, after `booking_lock_at`, after `show_start_at`, when any requested seat is locked, or when any requested seat/student is already booked; the whole batch is rolled back.
 - `POST /api/seats/release`
   - Student bearer token required.
   - Releases only the authenticated student's own booking. Proxy-booked seats must be released by the target student themselves.
-  - Response: `{ "released": { ... }, "released_bookings": [{ "seat_id": 101, "student_id": "1234567", "zone": "middle", "row_no": 1, "col_no": 1, "ticket_version": 1, "booked_at": "..." }] }`.
+  - Response: `{ "released": { ... }, "released_bookings": [{ "seat_id": 101, "student_id": "1121001", "zone": "middle", "row_no": 1, "col_no": 1, "ticket_version": 1, "booked_at": "..." }] }`.
   - `released` is kept for older clients and points to the released own booking; `released_bookings` contains the released own booking.
   - Returns `404` when the student has no own booking.
   - Returns `409` after `show_start_at`.
@@ -93,13 +94,13 @@ Student identity endpoints:
   - Response: `{ "valid": true, "method": "qr", "qr_payload": { ... }, "booking": { ... } }`.
 - `POST /api/checker/lookup`
   - Checker or admin bearer token required.
-  - Request: `{ "student_id": "1234567" }`.
+  - Request: `{ "student_id": "1121001" }`.
   - Returns the current booking and prior check-in summary for manual verification.
 - `POST /api/checker/checkin`
   - Checker or admin bearer token required.
   - Request for QR approval: `{ "method": "qr", "qr_token": "..." }`.
-  - Request for manual approval: `{ "method": "manual", "student_id": "1234567" }`.
-  - Request for no-booking approval: `{ "method": "force_no_booking", "student_id": "1234567" }`.
+  - Request for manual approval: `{ "method": "manual", "student_id": "1121001" }`.
+  - Request for no-booking approval: `{ "method": "force_no_booking", "student_id": "1121001" }`.
   - Writes `checkin_events` with `result = "approved"` and computes `is_first_scan`; repeated scans are accepted but return `is_first_scan: false`.
 - `GET /api/checker/stats`
   - Checker or admin bearer token required.
@@ -117,7 +118,7 @@ Student identity endpoints:
   - Returns every seat with block state and optional booking detail, including student profile fields and custom-label occupancy.
 - `POST /api/admin/seats/:id/assign`
   - Admin bearer token required.
-  - Assign request: `{ "student_id": "1234567", "force_release_existing": true|false }`.
+  - Assign request: `{ "student_id": "1121001", "force_release_existing": true|false }`.
   - Custom occupancy request: `{ "custom_label": "Crew hold", "force_release_existing": true|false }`.
   - Release request: `{ "release": true }`.
   - Returns `409` when the target seat or target student already has a booking and `force_release_existing` is not true.
@@ -128,8 +129,12 @@ Student identity endpoints:
   - Updates `seats.is_blocked` and writes `audit_logs.action = 'admin_lock'`.
 - `GET /api/admin/students`
   - Admin bearer token required.
-  - Query params: `page`, `page_size`, `class_code`, `search`.
+  - Query params: `page`, `page_size`, `grade_prefix` (`7` through `12` from `class_code`), `class_code`, `search`.
   - Response: `{ "students": [ ... ], "total": 0, "page": 1, "page_size": 50 }`.
+- `GET /api/admin/students/conflicts`
+  - Admin bearer token required.
+  - Query params: `grade_prefix`, `class_code`, `search`.
+  - Returns duplicate `class_code + seat_no_in_class` groups with the conflicting student IDs.
 - `GET /api/admin/audit-logs`
   - Admin bearer token required.
   - Query params: `page`, `page_size`, `action`, `actor`.

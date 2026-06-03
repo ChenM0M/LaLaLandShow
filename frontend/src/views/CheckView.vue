@@ -171,15 +171,16 @@ async function verifyByQR() {
 }
 
 async function lookup() {
-  if (!/^\d{7}$/.test(studentId.value)) {
-    error.value = '請輸入 7 位學號'
+  const normalizedStudentId = studentId.value.trim()
+  if (!/^11[0-5][1-4]\d{3}$/.test(normalizedStudentId)) {
+    error.value = '學號格式需為 110-115 + 1-4 + 後三位數字'
     return
   }
   loading.value = true
   error.value = ''
   lastEvent.value = null
   try {
-    verification.value = await lookupStudent(studentId.value)
+    verification.value = await lookupStudent(normalizedStudentId)
   } catch (e: any) {
     verification.value = null
     error.value = e?.response?.status === 404 ? '該學號無預約，仍可強制核准入場' : (e?.response?.data?.error || '查詢失敗')
@@ -348,7 +349,7 @@ onUnmounted(() => {
             </div>
             
             <div class="input-row">
-              <input v-model="studentId" class="large-input" maxlength="7" placeholder="輸入學號..." inputmode="numeric" @keyup.enter="lookup" />
+              <input v-model="studentId" class="large-input" maxlength="7" placeholder="1121001" inputmode="numeric" @keyup.enter="lookup" />
               <button class="btn-primary" :disabled="loading || studentId.length !== 7" @click="lookup">查詢</button>
             </div>
             

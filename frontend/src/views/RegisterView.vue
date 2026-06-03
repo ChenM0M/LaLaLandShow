@@ -13,14 +13,15 @@ const error = ref('')
 const loading = ref(false)
 
 const studentId = computed(() => auth.student?.student_id || 'STUDENT')
+const classOptions = ['701', '702', '703', '704', '705', '801', '802', '803', '804', '805', '901', '902', '903', '904', '905', '1001', '1002', '1003', '1004', '1005', '1101', '1102', '1103', '1104', '1105', '1201', '1202', '1203', '1204', '1205']
 
 async function submit() {
-  if (!/^\d+$/.test(classCode.value.trim())) {
-    error.value = '請輸入數字班級代碼'
+  if (!classOptions.includes(classCode.value.trim())) {
+    error.value = '班級需為 701-705 到 1201-1205'
     return
   }
-  if (!seatNo.value || seatNo.value < 1) {
-    error.value = '請輸入班級座位號'
+  if (!seatNo.value || seatNo.value < 1 || seatNo.value > 70) {
+    error.value = '班級座號需介於 1 到 70'
     return
   }
   loading.value = true
@@ -63,12 +64,15 @@ async function submit() {
         <div class="field-grid">
           <div class="form-group">
             <label for="class-code">班級代碼</label>
-            <input id="class-code" v-model="classCode" type="text" inputmode="numeric" placeholder="903" autofocus />
+            <select id="class-code" v-model="classCode" autofocus>
+              <option value="" disabled>選擇班級</option>
+              <option v-for="option in classOptions" :key="option" :value="option">{{ option }}</option>
+            </select>
           </div>
 
           <div class="form-group">
             <label for="seat-no">班級座號</label>
-            <input id="seat-no" v-model.number="seatNo" type="number" min="1" placeholder="12" />
+            <input id="seat-no" v-model.number="seatNo" type="number" min="1" max="70" placeholder="12" />
           </div>
         </div>
 
@@ -208,7 +212,8 @@ async function submit() {
   color: rgba(255, 244, 207, 0.62);
 }
 
-.profile-ticket input {
+.profile-ticket input,
+.profile-ticket select {
   border-bottom-color: rgba(255, 244, 207, 0.34);
   color: #fff4cf;
   font-size: 26px;
@@ -290,7 +295,8 @@ async function submit() {
     gap: 14px;
   }
 
-  .profile-ticket input {
+  .profile-ticket input,
+  .profile-ticket select {
     font-size: 24px;
   }
 }

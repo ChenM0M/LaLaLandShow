@@ -6,7 +6,9 @@ CREATE TABLE IF NOT EXISTS students (
   pending_notice JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT students_student_id_format CHECK (student_id ~ '^[0-9]{7}$'),
+  CONSTRAINT students_student_id_format CHECK (student_id ~ '^11[0-5][1-4][0-9]{3}$'),
+  CONSTRAINT students_class_code_format CHECK (class_code IS NULL OR class_code ~ '^(7|8|9|10|11|12)0[1-5]$'),
+  CONSTRAINT students_seat_no_range CHECK (seat_no_in_class IS NULL OR seat_no_in_class BETWEEN 1 AND 70),
   CONSTRAINT students_profile_complete CHECK (
     (class_code IS NULL AND seat_no_in_class IS NULL)
     OR (class_code IS NOT NULL AND seat_no_in_class IS NOT NULL)

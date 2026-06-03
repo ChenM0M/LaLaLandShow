@@ -6,6 +6,7 @@ import {
   adminDashboard,
   adminLogin,
   adminSeats,
+  adminStudentSeatConflicts,
   adminStudents,
   assignAdminSeat,
   exportBackup,
@@ -15,7 +16,7 @@ import {
   restoreBackup,
   setAdminConfig,
 } from '../api'
-import type { AdminAuditList, AdminCheckinList, AdminSeat, AdminStudentList, DashboardStats, Staff } from '../api'
+import type { AdminAuditList, AdminCheckinList, AdminSeat, AdminStudentList, AdminStudentSeatConflict, DashboardStats, Staff } from '../api'
 
 const username = ref(localStorage.getItem('staffUser') || 'admin')
 const password = ref('')
@@ -27,6 +28,7 @@ const tab = ref<'dashboard' | 'seats' | 'students' | 'logs' | 'config' | 'backup
 const dashboard = ref<DashboardStats | null>(null)
 const seats = ref<AdminSeat[]>([])
 const students = ref<AdminStudentList | null>(null)
+const studentConflicts = ref<AdminStudentSeatConflict[]>([])
 const audit = ref<AdminAuditList | null>(null)
 const checkins = ref<AdminCheckinList | null>(null)
 const selectedSeatId = ref<number | null>(null)
@@ -46,6 +48,11 @@ const restorePlan = ref<any>(null)
 const message = ref('')
 const error = ref('')
 const loading = ref(false)
+const studentFilters = ref({
+  grade_prefix: '',
+  class_code: '',
+  search: '',
+})
 
 const zoneLabels: Record<string, string> = {
   left: '左區',
@@ -61,6 +68,8 @@ const windowStateLabels: Record<string, string> = {
 }
 
 const zoneOrder = ['left', 'middle', 'right']
+const gradeOptions = ['7', '8', '9', '10', '11', '12']
+const classOptions = ['701', '702', '703', '704', '705', '801', '802', '803', '804', '805', '901', '902', '903', '904', '905', '1001', '1002', '1003', '1004', '1005', '1101', '1102', '1103', '1104', '1105', '1201', '1202', '1203', '1204', '1205']
 
 const selectedSeat = computed(() => seats.value.find(s => s.seat_id === selectedSeatId.value) || seats.value[0])
 const occupiedSeats = computed(() => seats.value.filter(s => s.booking).length)
@@ -89,6 +98,30 @@ const adminZones = computed(() => {
           seats: zoneSeats.sort((a, b) => a.col_no - b.col_no),
         })),
     }))
+})
+
+const normalizedStudentFilters = computed(() => ({
+  grade_prefix: studentFilters.value.grade_prefix.trim(),
+  class_code: studentFilters.value.class_code.trim(),
+  search: studentFilters.value.search.trim(),
+}))
+
+const studentOverview = computed(() => {
+  const rows = students.value?.students || []
+  const registered = rows.filter(student => !student.need_register).length
+  return {
+    total: students.value?.total ?? 0,
+    visible: rows.length,
+    registered,
+    needRegister: rows.length - registered,
+    conflicts: studentConflicts.value.length,
+  }
+})
+
+const availableClassOptions = computed(() => {
+  const grade = studentFilters.value.grade_prefix
+  if (!grade) return classOptions
+  return classOptions.filter(classCode => classCode.startsWith(grade))
 })
 
 function seatLabel(seat: AdminSeat) {
@@ -160,20 +193,52 @@ function logout() {
 async function refreshAll() {
   if (!staff.value) return
   error.value = ''
-  const [dash, seatRows, studentRows, auditRows, checkinRows] = await Promise.all([
+  const [dash, seatRows, studentRows, conflictRows, auditRows, checkinRows] = await Promise.all([
     adminDashboard(),
     adminSeats(),
-    adminStudents(),
+    adminStudents(normalizedStudentFilters.value),
+    adminStudentSeatConflicts(normalizedStudentFilters.value),
     adminAuditLogs(),
     adminCheckinEvents(),
   ])
   dashboard.value = dash
   seats.value = seatRows
   students.value = studentRows
+  studentConflicts.value = conflictRows
   audit.value = auditRows
   checkins.value = checkinRows
   if (!selectedSeatId.value && seatRows.length) selectedSeatId.value = seatRows[0].seat_id
   await loadWindowConfig()
+}
+
+async function refreshStudents() {
+  if (!staff.value) return
+  loading.value = true
+  error.value = ''
+  try {
+    const [studentRows, conflictRows] = await Promise.all([
+      adminStudents(normalizedStudentFilters.value),
+      adminStudentSeatConflicts(normalizedStudentFilters.value),
+    ])
+    students.value = studentRows
+    studentConflicts.value = conflictRows
+  } catch (e: any) {
+    error.value = e?.response?.data?.error || '學生資料載入失敗'
+  } finally {
+    loading.value = false
+  }
+}
+
+function resetStudentFilters() {
+  studentFilters.value = { grade_prefix: '', class_code: '', search: '' }
+  refreshStudents()
+}
+
+function updateStudentGradeFilter() {
+  if (studentFilters.value.class_code && !studentFilters.value.class_code.startsWith(studentFilters.value.grade_prefix)) {
+    studentFilters.value.class_code = ''
+  }
+  refreshStudents()
 }
 
 async function mutateSeat(kind: 'student' | 'custom' | 'release' | 'lock' | 'unlock') {
@@ -506,7 +571,7 @@ onMounted(() => {
               <strong>{{ formatDate(selectedSeat.booking.booked_at) }}</strong>
             </div>
           </div>
-          <input v-model="assignValue" maxlength="7" placeholder="綁定學號 1234567" />
+          <input v-model="assignValue" inputmode="numeric" maxlength="7" pattern="11[0-5][1-4][0-9]{3}" placeholder="綁定學號 1121001" />
           <button class="btn-primary" :disabled="loading" @click="mutateSeat('student')">強制綁定學號</button>
           <input v-model="customLabel" placeholder="自訂占用標籤" />
           <button class="btn-outline" :disabled="loading" @click="mutateSeat('custom')">自訂占用</button>
@@ -519,8 +584,67 @@ onMounted(() => {
         </div>
       </section>
 
-      <section v-if="tab === 'students'" class="card">
-        <h2 class="h2" style="margin-bottom:16px">學生名單</h2>
+      <section v-if="tab === 'students'" class="card stack">
+        <div class="toolbar admin-toolbar">
+          <div>
+            <p class="caption">STUDENT DIRECTORY</p>
+            <h2 class="h2">學生名單</h2>
+          </div>
+          <button class="btn-outline" :disabled="loading" @click="refreshStudents">重新整理</button>
+        </div>
+        <div class="student-filter-bar">
+          <label>
+            <span>年級</span>
+            <select v-model="studentFilters.grade_prefix" @change="updateStudentGradeFilter">
+              <option value="">全部</option>
+              <option v-for="grade in gradeOptions" :key="grade" :value="grade">{{ grade }}</option>
+            </select>
+          </label>
+          <label>
+            <span>班級</span>
+            <select v-model="studentFilters.class_code" @change="refreshStudents">
+              <option value="">全部</option>
+              <option v-for="classCode in availableClassOptions" :key="classCode" :value="classCode">{{ classCode }}</option>
+            </select>
+          </label>
+          <label>
+            <span>搜尋</span>
+            <input v-model="studentFilters.search" placeholder="學號或姓名" @keyup.enter="refreshStudents" />
+          </label>
+          <div class="filter-actions">
+            <button class="btn-primary" :disabled="loading" @click="refreshStudents">篩選</button>
+            <button class="btn-outline" :disabled="loading" @click="resetStudentFilters">清除</button>
+          </div>
+        </div>
+        <div class="panel-grid student-overview">
+          <div class="metric"><span class="caption">符合筆數</span><strong class="metric-value">{{ studentOverview.total }}</strong></div>
+          <div class="metric"><span class="caption">本頁顯示</span><strong class="metric-value">{{ studentOverview.visible }}</strong></div>
+          <div class="metric"><span class="caption">已註冊</span><strong class="metric-value">{{ studentOverview.registered }}</strong></div>
+          <div class="metric"><span class="caption">異常組</span><strong class="metric-value">{{ studentOverview.conflicts }}</strong></div>
+        </div>
+        <div class="conflict-panel">
+          <div class="toolbar admin-toolbar">
+            <div>
+              <p class="caption">DUPLICATE CHECK</p>
+              <h3>班級座號重複</h3>
+            </div>
+            <span class="status-pill" :class="studentConflicts.length ? 'warn' : 'good'">
+              {{ studentConflicts.length ? `${studentConflicts.length} 組異常` : '無異常' }}
+            </span>
+          </div>
+          <div v-if="studentConflicts.length" class="table-wrap">
+            <table>
+              <thead><tr><th>班級</th><th>座號</th><th>帳號 ID / 學生證號</th></tr></thead>
+              <tbody>
+                <tr v-for="conflict in studentConflicts" :key="`${conflict.class_code}-${conflict.seat_no_in_class}`">
+                  <td>{{ conflict.class_code }}</td>
+                  <td>{{ conflict.seat_no_in_class }}</td>
+                  <td>{{ conflict.student_ids.join('、') }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>學號</th><th>班級</th><th>座號</th><th>狀態</th><th>座位</th></tr></thead>
@@ -836,6 +960,60 @@ onMounted(() => {
   text-align: right;
 }
 
+.student-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(150px, 1fr) minmax(180px, 1.2fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.student-filter-bar label {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.student-filter-bar span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.student-filter-bar select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(8, 16, 39, 0.78);
+  color: var(--cream);
+  padding: 0 12px;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.student-overview {
+  margin: 0;
+}
+
+.conflict-panel {
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.conflict-panel h3 {
+  margin: 4px 0 0;
+  color: var(--cream);
+  font-size: 18px;
+}
+
 .stage-control {
   display: flex;
   align-items: flex-end;
@@ -921,6 +1099,14 @@ onMounted(() => {
   .stage-buttons {
     justify-content: flex-start;
   }
+
+  .student-filter-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .filter-actions {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 640px) {
@@ -970,6 +1156,14 @@ onMounted(() => {
 
   .seat-detail-list strong {
     text-align: left;
+  }
+
+  .student-filter-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-actions {
+    flex-direction: column;
   }
 }
 

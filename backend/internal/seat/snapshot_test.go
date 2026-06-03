@@ -19,21 +19,21 @@ func TestClassifySnapshotSeat(t *testing.T) {
 		{name: "locked", isBlocked: true, want: StateLocked},
 		{
 			name:             "mine",
-			bookingStudentID: sql.NullString{String: "1234567", Valid: true},
-			currentStudentID: "1234567",
+			bookingStudentID: sql.NullString{String: "1121001", Valid: true},
+			currentStudentID: "1121001",
 			want:             StateMine,
 		},
 		{
 			name:             "others",
-			bookingStudentID: sql.NullString{String: "7654321", Valid: true},
-			currentStudentID: "1234567",
+			bookingStudentID: sql.NullString{String: "1122001", Valid: true},
+			currentStudentID: "1121001",
 			want:             StateOthers,
 		},
 		{
 			name:              "proxy",
-			bookingStudentID:  sql.NullString{String: "7654321", Valid: true},
-			bookedByStudentID: sql.NullString{String: "1234567", Valid: true},
-			currentStudentID:  "1234567",
+			bookingStudentID:  sql.NullString{String: "1122001", Valid: true},
+			bookedByStudentID: sql.NullString{String: "1121001", Valid: true},
+			currentStudentID:  "1121001",
 			want:              StateProxy,
 		},
 		{

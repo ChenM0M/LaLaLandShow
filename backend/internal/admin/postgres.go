@@ -189,9 +189,9 @@ SELECT EXISTS (
   FROM students
   WHERE student_id = $1
     AND class_code IS NOT NULL
-    AND btrim(class_code) <> ''
+    AND class_code ~ '^(7|8|9|10|11|12)0[1-5]$'
     AND seat_no_in_class IS NOT NULL
-    AND seat_no_in_class > 0
+    AND seat_no_in_class BETWEEN 1 AND 70
 )`, studentID).Scan(&exists); err != nil {
 		return fmt.Errorf("check assigned student registration: %w", err)
 	}
@@ -250,8 +250,9 @@ WITH filtered AS (
          b.booked_by_student_id
   FROM students st
   LEFT JOIN seat_bookings b ON b.student_id = st.student_id
-  WHERE ($1 = '' OR st.class_code = $1)
-    AND ($2 = '' OR st.student_id ILIKE '%' || $2 || '%' OR st.display_name ILIKE '%' || $2 || '%')
+  WHERE ($1 = '' OR st.class_code LIKE $1 || '%')
+    AND ($2 = '' OR st.class_code = $2)
+    AND ($3 = '' OR st.student_id ILIKE '%' || $3 || '%' OR st.display_name ILIKE '%' || $3 || '%')
 )
 SELECT count(*) OVER(),
        student_id,
@@ -265,7 +266,7 @@ SELECT count(*) OVER(),
        booked_by_student_id
 FROM filtered
 ORDER BY student_id
-LIMIT $3 OFFSET $4`, filter.ClassCode, filter.Search, filter.PageSize, offset)
+LIMIT $4 OFFSET $5`, filter.GradePrefix, filter.ClassCode, filter.Search, filter.PageSize, offset)
 	if err != nil {
 		return StudentList{}, fmt.Errorf("query admin students: %w", err)
 	}
@@ -326,6 +327,46 @@ LIMIT $3 OFFSET $4`, filter.ClassCode, filter.Search, filter.PageSize, offset)
 		return StudentList{}, fmt.Errorf("iterate admin students: %w", err)
 	}
 	return list, nil
+}
+
+func (s *PostgresStore) ListStudentSeatConflicts(ctx context.Context, filter StudentFilter) ([]StudentSeatConflict, error) {
+	rows, err := s.db.Query(ctx, `
+WITH filtered AS (
+  SELECT student_id, class_code, seat_no_in_class, display_name
+  FROM students
+  WHERE class_code IS NOT NULL
+    AND btrim(class_code) <> ''
+    AND seat_no_in_class IS NOT NULL
+    AND seat_no_in_class > 0
+    AND ($1 = '' OR class_code LIKE $1 || '%')
+    AND ($2 = '' OR class_code = $2)
+    AND ($3 = '' OR student_id ILIKE '%' || $3 || '%' OR display_name ILIKE '%' || $3 || '%')
+)
+SELECT class_code,
+       seat_no_in_class,
+       array_agg(student_id ORDER BY student_id),
+       count(*)::int
+FROM filtered
+GROUP BY class_code, seat_no_in_class
+HAVING count(*) > 1
+ORDER BY class_code, seat_no_in_class`, filter.GradePrefix, filter.ClassCode, filter.Search)
+	if err != nil {
+		return nil, fmt.Errorf("query student seat conflicts: %w", err)
+	}
+	defer rows.Close()
+
+	conflicts := []StudentSeatConflict{}
+	for rows.Next() {
+		var conflict StudentSeatConflict
+		if err := rows.Scan(&conflict.ClassCode, &conflict.SeatNoInClass, &conflict.StudentIDs, &conflict.Count); err != nil {
+			return nil, fmt.Errorf("scan student seat conflict: %w", err)
+		}
+		conflicts = append(conflicts, conflict)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate student seat conflicts: %w", err)
+	}
+	return conflicts, nil
 }
 
 func (s *PostgresStore) ListAuditLogs(ctx context.Context, filter AuditFilter) (AuditLogList, error) {

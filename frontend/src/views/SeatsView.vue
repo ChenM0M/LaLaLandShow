@@ -121,7 +121,7 @@ const canSubmit = computed(() => {
   return selectedSeatSlots.value
     .slice(1)
     .filter((seat): seat is Seat => seat !== null)
-    .every(seat => /^[0-9]{7}$/.test(proxyStudentIds.value[seat.seat_id] || ''))
+    .every(seat => /^11[0-5][1-4]\d{3}$/.test(proxyStudentIds.value[seat.seat_id] || ''))
 })
 
 const windowBanner: Record<string, { label: string; detail: string; tone: string }> = {
@@ -1024,7 +1024,8 @@ onUnmounted(() => {
                 v-model="proxyStudentIds[seat.seat_id]"
                 inputmode="numeric"
                 maxlength="7"
-                placeholder="代約學號"
+                pattern="11[0-5][1-4][0-9]{3}"
+                placeholder="1121001"
               />
               <small v-else>{{ isChangingOwnSeat ? '新座位' : '本人' }}</small>
             </label>

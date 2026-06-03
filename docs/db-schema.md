@@ -7,7 +7,9 @@ Core correctness constraints:
 - `seat_bookings.seat_id` is the primary key, so one seat can have at most one booking.
 - `seat_bookings.student_id` is unique, so one student can have at most one seat.
 - `seat_bookings` requires exactly one of `student_id` or `custom_label`.
-- `students.student_id` must match seven digits.
+- `students.student_id` must match 110-115 + 1-4 + three digits.
+- `students.class_code` must be one of `701-705`, `801-805`, `901-905`, `1001-1005`, `1101-1105`, or `1201-1205` when present.
+- `students.seat_no_in_class` must be between `1` and `70` when present.
 - Students can exist in a semi-registered state with only `student_id`; `class_code` and `seat_no_in_class` are written together when registration is completed.
 - Seat snapshots derive public seat state from PostgreSQL: blocked seats are `locked`, unbooked seats are `free`, the authenticated student's own booking is `mine`, and other student/admin occupied seats are `others`.
 - Student booking writes run in one PostgreSQL transaction. The service requires the authenticated actor to have a completed profile, creates missing proxy target students as semi-registered rows, rejects a new batch when the authenticated actor already has an own booking, pre-locks requested seat rows, inserts all requested `seat_bookings` with `ON CONFLICT DO NOTHING`, and rolls back the whole batch unless every requested binding is inserted.

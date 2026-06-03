@@ -106,7 +106,7 @@ func TestServiceVerifyQRRejectsTampering(t *testing.T) {
 
 func TestServiceVerifyQRRejectsStaleTicket(t *testing.T) {
 	payload := ticket.QRPayload{
-		StudentID:     "1234567",
+		StudentID:     "1121001",
 		SeatID:        42,
 		TicketVersion: 1,
 		IssuedAt:      time.Unix(1000, 0).UTC().Format(time.RFC3339),
@@ -133,7 +133,7 @@ func TestServiceVerifyQRRejectsStaleTicket(t *testing.T) {
 
 func TestServiceCheckInQRMarksRepeatedScan(t *testing.T) {
 	payload := ticket.QRPayload{
-		StudentID:     "1234567",
+		StudentID:     "1121001",
 		SeatID:        42,
 		TicketVersion: 3,
 		IssuedAt:      time.Unix(1000, 0).UTC().Format(time.RFC3339),
@@ -180,7 +180,7 @@ func TestServiceCheckInForceNoBooking(t *testing.T) {
 
 	result, err := service.CheckIn(context.Background(), CheckInRequest{
 		Method:    MethodForceNoBooking,
-		StudentID: "7654321",
+		StudentID: "1122001",
 	}, scanner, "")
 	if err != nil {
 		t.Fatalf("CheckIn(force) error = %v", err)

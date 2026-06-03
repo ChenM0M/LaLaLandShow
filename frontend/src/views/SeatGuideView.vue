@@ -331,19 +331,21 @@ onMounted(async () => {
             </g>
 
             <!-- Entrance Marker -->
-            <circle cx="830" cy="750" r="8" class="entry-dot" />
-            <circle cx="830" cy="750" r="16" class="entry-pulse" />
-            <text x="830" y="776" class="entry-text" text-anchor="middle">ENTRANCE</text>
+            <g class="entry-marker" transform="translate(830, 750)">
+              <rect x="-26" y="-14" width="52" height="28" rx="6" class="entry-box" />
+              <text x="0" y="4" class="entry-label" text-anchor="middle">入口</text>
+            </g>
 
             <!-- Route Path -->
-            <path :d="guidePath" class="route-line" pathLength="100" stroke-linejoin="round" />
+            <path :d="guidePath" id="guideRoutePath" class="route-line" pathLength="100" stroke-linejoin="round" />
+
+            <!-- Moving Arrow -->
+            <path v-if="guidePath" d="M -8 -6 L 6 0 L -8 6 Z" class="route-arrow">
+              <animateMotion dur="2.5s" repeatCount="indefinite" rotate="auto">
+                <mpath href="#guideRoutePath" />
+              </animateMotion>
+            </path>
             
-              <!-- Target Seat Pulse/Ring -->
-              <circle v-if="activeZone"
-                      :cx="zones.find(z => z.id === activeZone)?.startX! + ((seat?.col_no || 1) - 1) * COL_PITCH + SEAT_SIZE / 2"
-                      :cy="getSeatY(seat?.row_no || 1) + SEAT_SIZE / 2"
-                      r="18"
-                      class="target-ring" />
             </g>
           </svg>
           
@@ -593,29 +595,17 @@ onMounted(async () => {
   stroke-width: 1.5;
 }
 
-.target-ring {
-  fill: none;
-  stroke: #f6b23f;
-  stroke-width: 2;
-  opacity: 0.5;
-  animation: ringPulse 2s 2s infinite ease-out;
+
+
+.entry-box {
+  fill: rgba(255, 255, 255, 0.1);
+  stroke: rgba(255, 255, 255, 0.4);
+  stroke-width: 1.5;
 }
 
-.entry-dot {
+.entry-label {
   fill: #fff;
-  filter: drop-shadow(0 0 6px #fff);
-}
-
-.entry-pulse {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.6);
-  stroke-width: 2;
-  animation: ringPulse 2s infinite ease-out;
-}
-
-.entry-text {
-  fill: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.1em;
 }
@@ -628,6 +618,11 @@ onMounted(async () => {
   stroke-dasharray: 100;
   stroke-dashoffset: 100;
   animation: drawLine 1.5s 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.route-arrow {
+  fill: #f6b23f;
+  filter: drop-shadow(0 0 4px #f6b23f);
 }
 
 .target-floating-badge {

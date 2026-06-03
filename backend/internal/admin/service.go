@@ -47,6 +47,7 @@ type Store interface {
 	AssignSeat(ctx context.Context, input AssignSeatInput) (SeatDetail, error)
 	LockSeat(ctx context.Context, input LockSeatInput) (SeatDetail, error)
 	ListStudents(ctx context.Context, filter StudentFilter) (StudentList, error)
+	ListStudentSeatConflicts(ctx context.Context, filter StudentFilter) ([]StudentSeatConflict, error)
 	ListAuditLogs(ctx context.Context, filter AuditFilter) (AuditLogList, error)
 	ListCheckinEvents(ctx context.Context, filter CheckinFilter) (CheckinEventList, error)
 	DashboardStats(ctx context.Context, now time.Time) (DashboardStats, error)
@@ -125,10 +126,11 @@ type LockSeatInput struct {
 }
 
 type StudentFilter struct {
-	Page      int
-	PageSize  int
-	ClassCode string
-	Search    string
+	Page        int
+	PageSize    int
+	GradePrefix string
+	ClassCode   string
+	Search      string
 }
 
 type StudentRow struct {
@@ -149,6 +151,13 @@ type StudentList struct {
 	Total    int          `json:"total"`
 	Page     int          `json:"page"`
 	PageSize int          `json:"page_size"`
+}
+
+type StudentSeatConflict struct {
+	ClassCode     string   `json:"class_code"`
+	SeatNoInClass int      `json:"seat_no_in_class"`
+	StudentIDs    []string `json:"student_ids"`
+	Count         int      `json:"count"`
 }
 
 type AuditFilter struct {
@@ -458,9 +467,18 @@ func (s *Service) LockSeat(ctx context.Context, input LockSeatInput) (SeatDetail
 
 func (s *Service) ListStudents(ctx context.Context, filter StudentFilter) (StudentList, error) {
 	filter.Page, filter.PageSize = normalizePage(filter.Page, filter.PageSize)
+	filter.GradePrefix = strings.TrimSpace(filter.GradePrefix)
 	filter.ClassCode = strings.TrimSpace(filter.ClassCode)
 	filter.Search = strings.TrimSpace(filter.Search)
 	return s.store.ListStudents(ctx, filter)
+}
+
+func (s *Service) ListStudentSeatConflicts(ctx context.Context, filter StudentFilter) ([]StudentSeatConflict, error) {
+	filter.Page, filter.PageSize = normalizePage(filter.Page, filter.PageSize)
+	filter.GradePrefix = strings.TrimSpace(filter.GradePrefix)
+	filter.ClassCode = strings.TrimSpace(filter.ClassCode)
+	filter.Search = strings.TrimSpace(filter.Search)
+	return s.store.ListStudentSeatConflicts(ctx, filter)
 }
 
 func (s *Service) ListAuditLogs(ctx context.Context, filter AuditFilter) (AuditLogList, error) {
@@ -646,6 +664,12 @@ func validateBackupSnapshot(snapshot BackupSnapshot) error {
 			return ErrInvalidBackup
 		}
 		if (studentRow.ClassCode == nil) != (studentRow.SeatNoInClass == nil) {
+			return ErrInvalidBackup
+		}
+		if studentRow.ClassCode != nil && !student.IsValidClassCode(*studentRow.ClassCode) {
+			return ErrInvalidBackup
+		}
+		if studentRow.SeatNoInClass != nil && !student.IsValidSeatNoInClass(*studentRow.SeatNoInClass) {
 			return ErrInvalidBackup
 		}
 		if len(studentRow.PendingNotice) > 0 && !json.Valid(studentRow.PendingNotice) {

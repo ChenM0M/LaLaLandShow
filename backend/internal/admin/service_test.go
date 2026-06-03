@@ -53,6 +53,10 @@ func (s *fakeStore) ListStudents(_ context.Context, filter StudentFilter) (Stude
 	return StudentList{Page: filter.Page, PageSize: filter.PageSize}, nil
 }
 
+func (s *fakeStore) ListStudentSeatConflicts(_ context.Context, _ StudentFilter) ([]StudentSeatConflict, error) {
+	return []StudentSeatConflict{}, nil
+}
+
 func (s *fakeStore) ListAuditLogs(_ context.Context, filter AuditFilter) (AuditLogList, error) {
 	return AuditLogList{Page: filter.Page, PageSize: filter.PageSize}, nil
 }
@@ -259,13 +263,13 @@ func minimalBackupSnapshot(now time.Time) BackupSnapshot {
 			UpdatedAt: now.UTC(),
 		}},
 		Students: []BackupStudent{{
-			StudentID: "1234567",
+			StudentID: "1121001",
 			CreatedAt: now.UTC(),
 			UpdatedAt: now.UTC(),
 		}},
 		SeatBookings: []BackupSeatBooking{{
 			SeatID:        1,
-			StudentID:     stringLiteral("1234567"),
+			StudentID:     stringLiteral("1121001"),
 			BookedAt:      now.UTC(),
 			TicketVersion: 1,
 		}},

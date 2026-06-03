@@ -12,7 +12,7 @@ import (
 
 var (
 	ErrInvalidBookingBatch     = errors.New("booking request must contain 1 to 3 seats")
-	ErrInvalidBookingStudentID = errors.New("student_id must be exactly seven digits")
+	ErrInvalidBookingStudentID = errors.New("student_id must match 110-115 + 1-4 + three digits")
 	ErrInvalidSeatID           = errors.New("seat_id must be positive")
 	ErrDuplicateSeat           = errors.New("booking request contains duplicate seat_id")
 	ErrDuplicateStudent        = errors.New("booking request contains duplicate student_id")

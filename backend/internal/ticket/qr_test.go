@@ -7,7 +7,7 @@ import (
 )
 
 func TestSignAndVerifyQR(t *testing.T) {
-	payload := newQRPayload("1234567", 42, 3, time.Unix(1000, 0).UTC())
+	payload := newQRPayload("1121001", 42, 3, time.Unix(1000, 0).UTC())
 
 	token, err := SignQR(payload, []byte("secret"))
 	if err != nil {
@@ -24,7 +24,7 @@ func TestSignAndVerifyQR(t *testing.T) {
 }
 
 func TestVerifyQRRejectsTampering(t *testing.T) {
-	payload := newQRPayload("1234567", 42, 3, time.Unix(1000, 0).UTC())
+	payload := newQRPayload("1121001", 42, 3, time.Unix(1000, 0).UTC())
 	token, err := SignQR(payload, []byte("secret"))
 	if err != nil {
 		t.Fatalf("SignQR() error = %v", err)

@@ -223,6 +223,13 @@ export interface AdminStudentList {
   page_size: number
 }
 
+export interface AdminStudentSeatConflict {
+  class_code: string
+  seat_no_in_class: number
+  student_ids: string[]
+  count: number
+}
+
 export interface AdminAuditList {
   logs: Array<{ id: number; actor_type: string; actor_id?: string | null; action: string; target_seat_id?: number | null; target_student?: string | null; created_at: string }>
   total: number
@@ -289,7 +296,10 @@ export const adminLogin = (username: string, password: string) =>
 
 export const adminDashboard = () => api.get<DashboardStats>('/admin/dashboard').then(r => r.data)
 export const adminSeats = () => api.get<{ seats: AdminSeat[] }>('/admin/seats').then(r => r.data.seats)
-export const adminStudents = () => api.get<AdminStudentList>('/admin/students').then(r => r.data)
+export const adminStudents = (params?: { grade_prefix?: string; class_code?: string; search?: string }) =>
+  api.get<AdminStudentList>('/admin/students', { params }).then(r => r.data)
+export const adminStudentSeatConflicts = (params?: { grade_prefix?: string; class_code?: string; search?: string }) =>
+  api.get<{ conflicts: AdminStudentSeatConflict[] }>('/admin/students/conflicts', { params }).then(r => r.data.conflicts)
 export const adminAuditLogs = () => api.get<AdminAuditList>('/admin/audit-logs').then(r => r.data)
 export const adminCheckinEvents = () => api.get<AdminCheckinList>('/admin/checkin-events').then(r => r.data)
 
