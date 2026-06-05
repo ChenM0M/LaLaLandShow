@@ -239,7 +239,8 @@ func writeBookingError(c fiber.Ctx, err error) error {
 		errors.Is(err, ErrSeatLocked),
 		errors.Is(err, ErrChangeLocked),
 		errors.Is(err, ErrBookingFrozen),
-		errors.Is(err, ErrIncompleteRegistration):
+		errors.Is(err, ErrIncompleteRegistration),
+		errors.Is(err, ErrAccountBanned):
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": bookingErrorMessage(err)})
 	default:
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
@@ -280,6 +281,8 @@ func bookingErrorMessage(err error) string {
 		return ErrBookingFrozen.Error()
 	case errors.Is(err, ErrIncompleteRegistration):
 		return ErrIncompleteRegistration.Error()
+	case errors.Is(err, ErrAccountBanned):
+		return ErrAccountBanned.Error()
 	default:
 		return err.Error()
 	}

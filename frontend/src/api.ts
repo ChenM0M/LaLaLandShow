@@ -217,7 +217,13 @@ export interface DashboardStats {
 }
 
 export interface AdminStudentList {
-  students: Array<Student & { need_register: boolean; seat_id?: number | null; booked_at?: string | null }>
+  students: Array<Student & {
+    need_register: boolean
+    seat_id?: number | null
+    booked_at?: string | null
+    account_banned?: boolean
+    ban_reason?: string | null
+  }>
   total: number
   page: number
   page_size: number
@@ -296,10 +302,21 @@ export const adminLogin = (username: string, password: string) =>
 
 export const adminDashboard = () => api.get<DashboardStats>('/admin/dashboard').then(r => r.data)
 export const adminSeats = () => api.get<{ seats: AdminSeat[] }>('/admin/seats').then(r => r.data.seats)
-export const adminStudents = (params?: { grade_prefix?: string; class_code?: string; search?: string }) =>
+export const adminStudents = (params?: {
+  grade_prefix?: string
+  class_code?: string
+  search?: string
+  registration_status?: string
+  booking_status?: string
+  account_status?: string
+  page?: number
+  page_size?: number
+}) =>
   api.get<AdminStudentList>('/admin/students', { params }).then(r => r.data)
 export const adminStudentSeatConflicts = (params?: { grade_prefix?: string; class_code?: string; search?: string }) =>
   api.get<{ conflicts: AdminStudentSeatConflict[] }>('/admin/students/conflicts', { params }).then(r => r.data.conflicts)
+export const setAdminStudentBan = (student_id: string, data: { banned: boolean; reason?: string }) =>
+  api.post<{ student: AdminStudentList['students'][number] }>(`/admin/students/${student_id}/ban`, data).then(r => r.data.student)
 export const adminAuditLogs = () => api.get<AdminAuditList>('/admin/audit-logs').then(r => r.data)
 export const adminCheckinEvents = () => api.get<AdminCheckinList>('/admin/checkin-events').then(r => r.data)
 

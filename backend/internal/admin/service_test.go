@@ -19,6 +19,7 @@ type fakeStore struct {
 	assignInput  AssignSeatInput
 	assignErr    error
 	configInput  ConfigInput
+	banInput     StudentBanInput
 	exportType   string
 	windowState  WindowState
 	dashboardAt  time.Time
@@ -51,6 +52,11 @@ func (s *fakeStore) LockSeat(_ context.Context, input LockSeatInput) (SeatDetail
 
 func (s *fakeStore) ListStudents(_ context.Context, filter StudentFilter) (StudentList, error) {
 	return StudentList{Page: filter.Page, PageSize: filter.PageSize}, nil
+}
+
+func (s *fakeStore) SetStudentBan(_ context.Context, input StudentBanInput) (StudentRow, error) {
+	s.banInput = input
+	return StudentRow{StudentID: input.StudentID, AccountBanned: input.Banned}, nil
 }
 
 func (s *fakeStore) ListStudentSeatConflicts(_ context.Context, _ StudentFilter) ([]StudentSeatConflict, error) {
@@ -155,6 +161,30 @@ func TestServiceAssignSeatValidatesInput(t *testing.T) {
 	}
 	if _, err := service.AssignSeat(context.Background(), AssignSeatInput{SeatID: 1, StudentID: "abc"}); !errors.Is(err, student.ErrInvalidStudentID) {
 		t.Fatalf("AssignSeat(invalid student) error = %v, want invalid student id", err)
+	}
+}
+
+func TestServiceSetStudentBanValidatesAndNormalizesInput(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(store, auth.NewManager("jwt-secret", time.Hour))
+
+	if _, err := service.SetStudentBan(context.Background(), StudentBanInput{StudentID: "abc", Banned: true}); !errors.Is(err, student.ErrInvalidStudentID) {
+		t.Fatalf("SetStudentBan(invalid) error = %v, want invalid student id", err)
+	}
+	row, err := service.SetStudentBan(context.Background(), StudentBanInput{
+		StudentID: " 1121001 ",
+		Banned:    true,
+		Reason:    " suspicious ",
+		Actor:     " admin ",
+	})
+	if err != nil {
+		t.Fatalf("SetStudentBan(valid) error = %v", err)
+	}
+	if row.StudentID != "1121001" || !row.AccountBanned {
+		t.Fatalf("row = %#v, want banned 1121001", row)
+	}
+	if store.banInput.StudentID != "1121001" || store.banInput.Reason != "suspicious" || store.banInput.Actor != "admin" {
+		t.Fatalf("ban input = %#v, want normalized", store.banInput)
 	}
 }
 

@@ -32,6 +32,7 @@ Core correctness constraints:
 - Admin login reuses `staff_accounts` but requires role `admin`.
 - Admin seat assignment runs in a PostgreSQL transaction, locks the target seat, optionally releases conflicting target/student bookings when `force_release_existing=true`, writes the new `seat_bookings` row, and records `audit_logs.action` as `admin_assign`, `admin_force`, or `admin_release`.
 - Admin forced student-seat changes write `students.pending_notice` with an `admin_seat_adjustment` payload; student login and `/api/student/me` expose it, and `/api/student/notice/ack` clears it.
+- Admin account bans reuse existing `students.pending_notice` with an `admin_account_ban` payload and restore any previous notice on unban; no database schema change is required.
 - Admin permanent locking updates `seats.is_blocked` and `seats.block_reason`; seat snapshots continue to surface blocked seats as `locked`.
 - Admin config writes upsert `system_config.value_json` and write `audit_logs.action = 'admin_config'`.
 - Admin list/export endpoints read from `students`, `seat_bookings`, `audit_logs`, and `checkin_events`; they do not mutate state.

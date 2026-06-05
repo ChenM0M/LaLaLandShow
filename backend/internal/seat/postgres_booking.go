@@ -13,6 +13,20 @@ import (
 
 const uniqueViolationCode = "23505"
 
+func (s *PostgresSnapshotStore) IsStudentBanned(ctx context.Context, studentID string) (bool, error) {
+	var banned bool
+	if err := s.db.QueryRow(ctx, `
+SELECT COALESCE(pending_notice @> '{"type":"admin_account_ban"}'::jsonb, false)
+FROM students
+WHERE student_id = $1`, studentID).Scan(&banned); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("check student ban: %w", err)
+	}
+	return banned, nil
+}
+
 func (s *PostgresSnapshotStore) BookSeats(ctx context.Context, actorStudentID string, entries []BookEntry) ([]BookedSeat, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {

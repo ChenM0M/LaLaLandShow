@@ -253,6 +253,9 @@ WITH filtered AS (
   WHERE ($1 = '' OR st.class_code LIKE $1 || '%')
     AND ($2 = '' OR st.class_code = $2)
     AND ($3 = '' OR st.student_id ILIKE '%' || $3 || '%' OR st.display_name ILIKE '%' || $3 || '%')
+    AND ($6 = '' OR ($6 = 'registered' AND st.class_code IS NOT NULL AND st.seat_no_in_class IS NOT NULL) OR ($6 = 'need_register' AND (st.class_code IS NULL OR st.seat_no_in_class IS NULL)))
+    AND ($7 = '' OR ($7 = 'booked' AND b.seat_id IS NOT NULL) OR ($7 = 'unbooked' AND b.seat_id IS NULL))
+    AND ($8 = '' OR ($8 = 'banned' AND COALESCE(st.pending_notice @> '{"type":"admin_account_ban"}'::jsonb, false)) OR ($8 = 'active' AND NOT COALESCE(st.pending_notice @> '{"type":"admin_account_ban"}'::jsonb, false)))
 )
 SELECT count(*) OVER(),
        student_id,
@@ -266,7 +269,7 @@ SELECT count(*) OVER(),
        booked_by_student_id
 FROM filtered
 ORDER BY student_id
-LIMIT $4 OFFSET $5`, filter.GradePrefix, filter.ClassCode, filter.Search, filter.PageSize, offset)
+LIMIT $4 OFFSET $5`, filter.GradePrefix, filter.ClassCode, filter.Search, filter.PageSize, offset, filter.RegistrationStatus, filter.BookingStatus, filter.AccountStatus)
 	if err != nil {
 		return StudentList{}, fmt.Errorf("query admin students: %w", err)
 	}
@@ -274,59 +277,160 @@ LIMIT $4 OFFSET $5`, filter.GradePrefix, filter.ClassCode, filter.Search, filter
 
 	list := StudentList{Students: []StudentRow{}, Page: filter.Page, PageSize: filter.PageSize}
 	for rows.Next() {
-		var (
-			row             StudentRow
-			total           int
-			classCode       sql.NullString
-			seatNoInClass   sql.NullInt64
-			displayName     sql.NullString
-			pendingNotice   []byte
-			seatID          sql.NullInt64
-			bookedAt        sql.NullTime
-			ticketVersion   sql.NullInt64
-			bookedByStudent sql.NullString
-		)
-		if err := rows.Scan(
-			&total,
-			&row.StudentID,
-			&classCode,
-			&seatNoInClass,
-			&displayName,
-			&pendingNotice,
-			&seatID,
-			&bookedAt,
-			&ticketVersion,
-			&bookedByStudent,
-		); err != nil {
-			return StudentList{}, fmt.Errorf("scan admin student: %w", err)
+		total, row, err := scanAdminStudentRow(rows)
+		if err != nil {
+			return StudentList{}, err
 		}
 		list.Total = total
-		row.ClassCode = stringPtr(classCode)
-		row.SeatNoInClass = intPtr(seatNoInClass)
-		row.DisplayName = stringPtr(displayName)
-		row.NeedRegister = row.ClassCode == nil || row.SeatNoInClass == nil
-		if len(pendingNotice) > 0 {
-			row.PendingNotice = append(json.RawMessage(nil), pendingNotice...)
-		}
-		if seatID.Valid {
-			value := seatID.Int64
-			row.SeatID = &value
-		}
-		if bookedAt.Valid {
-			value := bookedAt.Time
-			row.BookedAt = &value
-		}
-		if ticketVersion.Valid {
-			value := int(ticketVersion.Int64)
-			row.TicketVersion = &value
-		}
-		row.ProxyBookedBy = stringPtr(bookedByStudent)
 		list.Students = append(list.Students, row)
 	}
 	if err := rows.Err(); err != nil {
 		return StudentList{}, fmt.Errorf("iterate admin students: %w", err)
 	}
 	return list, nil
+}
+
+func (s *PostgresStore) SetStudentBan(ctx context.Context, input StudentBanInput) (StudentRow, error) {
+	var updateSQL string
+	var args []any
+	action := "admin_student_unban"
+	if input.Banned {
+		action = "admin_student_ban"
+		updateSQL = `
+UPDATE students
+SET pending_notice = CASE
+      WHEN pending_notice @> '{"type":"admin_account_ban"}'::jsonb THEN
+        pending_notice || jsonb_build_object('reason', $2::text, 'banned_by', $3::text, 'banned_at', to_jsonb(now()))
+      ELSE
+        jsonb_build_object(
+          'type', 'admin_account_ban',
+          'reason', $2::text,
+          'banned_by', $3::text,
+          'banned_at', to_jsonb(now()),
+          'previous_notice', pending_notice
+        )
+    END,
+    updated_at = now()
+WHERE student_id = $1
+RETURNING student_id`
+		args = []any{input.StudentID, input.Reason, input.Actor}
+	} else {
+		updateSQL = `
+UPDATE students
+SET pending_notice = CASE
+      WHEN pending_notice @> '{"type":"admin_account_ban"}'::jsonb THEN NULLIF(pending_notice->'previous_notice', 'null'::jsonb)
+      ELSE pending_notice
+    END,
+    updated_at = now()
+WHERE student_id = $1
+RETURNING student_id`
+		args = []any{input.StudentID}
+	}
+
+	var studentID string
+	if err := s.db.QueryRow(ctx, updateSQL, args...).Scan(&studentID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return StudentRow{}, student.ErrNotFound
+		}
+		return StudentRow{}, fmt.Errorf("set student ban: %w", err)
+	}
+	after, _ := json.Marshal(map[string]any{"student_id": input.StudentID, "banned": input.Banned, "reason": input.Reason})
+	targetStudent := input.StudentID
+	if err := s.writePoolAudit(ctx, action, input.Actor, 0, &targetStudent, nil, json.RawMessage(after)); err != nil {
+		return StudentRow{}, err
+	}
+	return s.GetStudent(ctx, studentID)
+}
+
+func (s *PostgresStore) GetStudent(ctx context.Context, studentID string) (StudentRow, error) {
+	row := s.db.QueryRow(ctx, `
+SELECT 1,
+       st.student_id,
+       st.class_code,
+       st.seat_no_in_class,
+       st.display_name,
+       st.pending_notice,
+       b.seat_id,
+       b.booked_at,
+       b.ticket_version,
+       b.booked_by_student_id
+FROM students st
+LEFT JOIN seat_bookings b ON b.student_id = st.student_id
+WHERE st.student_id = $1`, studentID)
+	_, studentRow, err := scanAdminStudentRow(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return StudentRow{}, student.ErrNotFound
+	}
+	if err != nil {
+		return StudentRow{}, err
+	}
+	return studentRow, nil
+}
+
+func scanAdminStudentRow(row rowScanner) (int, StudentRow, error) {
+	var (
+		studentRow      StudentRow
+		total           int
+		classCode       sql.NullString
+		seatNoInClass   sql.NullInt64
+		displayName     sql.NullString
+		pendingNotice   []byte
+		seatID          sql.NullInt64
+		bookedAt        sql.NullTime
+		ticketVersion   sql.NullInt64
+		bookedByStudent sql.NullString
+	)
+	if err := row.Scan(
+		&total,
+		&studentRow.StudentID,
+		&classCode,
+		&seatNoInClass,
+		&displayName,
+		&pendingNotice,
+		&seatID,
+		&bookedAt,
+		&ticketVersion,
+		&bookedByStudent,
+	); err != nil {
+		return 0, StudentRow{}, fmt.Errorf("scan admin student: %w", err)
+	}
+	studentRow.ClassCode = stringPtr(classCode)
+	studentRow.SeatNoInClass = intPtr(seatNoInClass)
+	studentRow.DisplayName = stringPtr(displayName)
+	studentRow.NeedRegister = studentRow.ClassCode == nil || studentRow.SeatNoInClass == nil
+	if len(pendingNotice) > 0 {
+		studentRow.PendingNotice = append(json.RawMessage(nil), pendingNotice...)
+	}
+	if seatID.Valid {
+		value := seatID.Int64
+		studentRow.SeatID = &value
+	}
+	if bookedAt.Valid {
+		value := bookedAt.Time
+		studentRow.BookedAt = &value
+	}
+	if ticketVersion.Valid {
+		value := int(ticketVersion.Int64)
+		studentRow.TicketVersion = &value
+	}
+	studentRow.ProxyBookedBy = stringPtr(bookedByStudent)
+	studentRow.AccountBanned = student.IsAccountBanned(studentRow.PendingNotice)
+	studentRow.BanReason = banReason(studentRow.PendingNotice)
+	return total, studentRow, nil
+}
+
+func banReason(raw json.RawMessage) *string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var notice struct {
+		Type   string `json:"type"`
+		Reason string `json:"reason"`
+	}
+	if err := json.Unmarshal(raw, &notice); err != nil || notice.Type != "admin_account_ban" || notice.Reason == "" {
+		return nil
+	}
+	return &notice.Reason
 }
 
 func (s *PostgresStore) ListStudentSeatConflicts(ctx context.Context, filter StudentFilter) ([]StudentSeatConflict, error) {

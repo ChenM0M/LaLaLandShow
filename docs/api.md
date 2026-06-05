@@ -12,6 +12,7 @@ Student identity endpoints:
   - Public.
   - Request: `{ "student_id": "1121001" }`.
   - Creates a semi-registered student row on first login.
+  - Returns `403` with `该账号学号信息真实性存疑，现已封禁、不予预约资格，如需申述请向1203相关负责人反馈` when the account has been banned by an admin.
   - Response: `{ "token": "...", "student": { ... }, "need_register": true|false, "pending_notice": null|{ ... } }`.
 - `POST /api/student/register`
   - Student bearer token required.
@@ -129,8 +130,13 @@ Student identity endpoints:
   - Updates `seats.is_blocked` and writes `audit_logs.action = 'admin_lock'`.
 - `GET /api/admin/students`
   - Admin bearer token required.
-  - Query params: `page`, `page_size`, `grade_prefix` (`7` through `12` from `class_code`), `class_code`, `search`.
+  - Query params: `page`, `page_size`, `grade_prefix` (`7` through `12` from `class_code`), `class_code`, `search`, `registration_status` (`registered` or `need_register`), `booking_status` (`booked` or `unbooked`), and `account_status` (`active` or `banned`).
   - Response: `{ "students": [ ... ], "total": 0, "page": 1, "page_size": 50 }`.
+- `POST /api/admin/students/:id/ban`
+  - Admin bearer token required.
+  - Request: `{ "banned": true, "reason": "optional" }`; unban with `{ "banned": false }`.
+  - Stores the ban marker in existing `students.pending_notice`, preserves the previous notice for restore on unban, writes an audit log, and returns the updated student row.
+  - Banned accounts cannot log in, update registration data, clear the ban notice, or perform seat operations with an existing token.
 - `GET /api/admin/students/conflicts`
   - Admin bearer token required.
   - Query params: `grade_prefix`, `class_code`, `search`.

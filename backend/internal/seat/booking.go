@@ -27,6 +27,7 @@ var (
 	ErrChangeLocked            = errors.New("seat changes are locked")
 	ErrBookingFrozen           = errors.New("seat operations are frozen")
 	ErrIncompleteRegistration  = errors.New("student registration is incomplete")
+	ErrAccountBanned           = errors.New("该账号学号信息真实性存疑，现已封禁、不予预约资格，如需申述请向1203相关负责人反馈")
 )
 
 type Store interface {
@@ -35,6 +36,7 @@ type Store interface {
 	RebookSeats(ctx context.Context, actorStudentID string, entries []BookEntry) (RebookResult, error)
 	ReleaseSeats(ctx context.Context, actorStudentID string) ([]BookedSeat, error)
 	ChangeSeat(ctx context.Context, actorStudentID string, newSeatID int64) (SeatChange, error)
+	IsStudentBanned(ctx context.Context, studentID string) (bool, error)
 }
 
 type Service struct {
@@ -84,6 +86,9 @@ func (s *Service) Book(ctx context.Context, actorStudentID string, entries []Boo
 	if err != nil {
 		return BookResult{}, err
 	}
+	if err := s.ensureActorAllowed(ctx, actorStudentID); err != nil {
+		return BookResult{}, err
+	}
 
 	bookings, err := s.store.BookSeats(ctx, actorStudentID, normalized)
 	if err != nil {
@@ -95,6 +100,9 @@ func (s *Service) Book(ctx context.Context, actorStudentID string, entries []Boo
 func (s *Service) Rebook(ctx context.Context, actorStudentID string, entries []BookEntry) (RebookResult, error) {
 	normalized, err := normalizeBookEntries(actorStudentID, entries)
 	if err != nil {
+		return RebookResult{}, err
+	}
+	if err := s.ensureActorAllowed(ctx, actorStudentID); err != nil {
 		return RebookResult{}, err
 	}
 
@@ -109,6 +117,9 @@ func (s *Service) Release(ctx context.Context, actorStudentID string) (ReleaseRe
 	actorStudentID = strings.TrimSpace(actorStudentID)
 	if !student.IsValidStudentID(actorStudentID) {
 		return ReleaseResult{}, ErrInvalidBookingStudentID
+	}
+	if err := s.ensureActorAllowed(ctx, actorStudentID); err != nil {
+		return ReleaseResult{}, err
 	}
 
 	released, err := s.store.ReleaseSeats(ctx, actorStudentID)
@@ -128,6 +139,9 @@ func (s *Service) Change(ctx context.Context, actorStudentID string, newSeatID i
 	}
 	if newSeatID <= 0 {
 		return SeatChange{}, ErrInvalidSeatID
+	}
+	if err := s.ensureActorAllowed(ctx, actorStudentID); err != nil {
+		return SeatChange{}, err
 	}
 
 	change, err := s.store.ChangeSeat(ctx, actorStudentID, newSeatID)
@@ -176,4 +190,15 @@ func normalizeBookEntries(actorStudentID string, entries []BookEntry) ([]BookEnt
 		return nil, ErrMissingSelfBooking
 	}
 	return normalized, nil
+}
+
+func (s *Service) ensureActorAllowed(ctx context.Context, actorStudentID string) error {
+	banned, err := s.store.IsStudentBanned(ctx, strings.TrimSpace(actorStudentID))
+	if err != nil {
+		return fmt.Errorf("check account ban: %w", err)
+	}
+	if banned {
+		return ErrAccountBanned
+	}
+	return nil
 }

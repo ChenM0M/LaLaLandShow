@@ -2,6 +2,7 @@ package student
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -109,6 +110,20 @@ func TestServiceRejectsInvalidStudentID(t *testing.T) {
 
 	if _, err := service.Login(context.Background(), "abc"); !errors.Is(err, ErrInvalidStudentID) {
 		t.Fatalf("Login(invalid) error = %v, want %v", err, ErrInvalidStudentID)
+	}
+}
+
+func TestServiceLoginRejectsBannedAccount(t *testing.T) {
+	store := newFakeStore()
+	store.students["1121001"] = Student{
+		StudentID:     "1121001",
+		NeedRegister:  true,
+		PendingNotice: json.RawMessage(`{"type":"admin_account_ban","reason":"suspicious"}`),
+	}
+	service := NewService(store, fakeTokenIssuer{})
+
+	if _, err := service.Login(context.Background(), "1121001"); !errors.Is(err, ErrAccountBanned) {
+		t.Fatalf("Login(banned) error = %v, want %v", err, ErrAccountBanned)
 	}
 }
 

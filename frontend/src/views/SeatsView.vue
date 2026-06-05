@@ -820,6 +820,7 @@ onUnmounted(() => {
             <span>第 2、3 個座位需要填寫代約學號</span>
             <span>白色座位可選，灰色座位不可選</span>
             <span>只能代約尚未有座位的同學，完成後由本人管理</span>
+            <span>請依實際資訊填寫；資料不符將無法正常預約</span>
           </div>
           <button class="btn-primary" type="button" @click="acceptRules">進入選座</button>
         </section>

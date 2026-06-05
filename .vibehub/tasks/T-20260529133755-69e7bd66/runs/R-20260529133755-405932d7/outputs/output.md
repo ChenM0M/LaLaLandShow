@@ -238,6 +238,181 @@
 ### Key Decisions Made
 - `inferred`: 用户描述的“第二位数字只有可能 1-4”结合示例 `【112】【1】【xxx】`，实现为第四位/第二段数字只允许 `1-4`。
 - `agent_reported`: 异常检测放在后端查询中完成，避免前端只基于当前分页计算导致漏报其他页重复班级座号。
+
+## Session Addendum 2026-06-05 Admin Account Paging, Filters, and Ban
+
+### Completed
+- `user_confirmed`: 用户要求不修改数据库结构、不影响既有存储数据，实现管理员展示所有账号、按账号情况筛选、封禁异常账号、封禁账号无法登录/预约，并补充真实信息填写说明。
+- `hard_observed`: 已按项目协议读取 `.vibehub/agent-view/current.md`、`.vibehub/agent-view/current-context.md`、`.vibehub/agent-view/handoff.md`、`.vibehub/rules/hard-rules.md`、`.vibehub/adapters/protocol.md`、当前 context pack 与 `vibehub-sync` 技能说明。
+- `hard_observed`: 已运行 `vibehub sync /Users/chenm0m/LocalRepo/LaLaLandShow`；同步结果为 `needs_attention`，报告路径为 `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/sync/sync-20260605-004623.md`。
+- `hard_observed`: 管理员学生列表接口保留原分页语义，前端新增页码、上一页/下一页与每页 50/100 控件，可翻阅所有符合条件账号。
+- `hard_observed`: 管理员学生列表新增 `registration_status`、`booking_status`、`account_status` 查询参数，前端提供注册状态、订座状态、账号状态筛选。
+- `hard_observed`: 新增 `/api/admin/students/:id/ban`，管理员可封禁/解封学生账号；封禁状态复用现有 `students.pending_notice` JSON 字段，封禁时保留 `previous_notice`，解封时恢复原 notice 或置空，未新增 migration/schema。
+- `hard_observed`: 后端学生登录、注册资料更新、通知确认、预约、重约、取消、换座均会识别 `admin_account_ban` 并拒绝封禁账号；旧 token 也无法继续进行座位操作或清除封禁 notice。
+- `hard_observed`: 管理员列表返回 `account_banned` 与 `ban_reason`，前端表格新增账号状态和封禁/解封操作。
+- `hard_observed`: 注册页和选座规则说明已补充“请依实际信息填写；资料不符将无法正常预约/核验”的提示。
+- `hard_observed`: `docs/api.md` 与 `docs/db-schema.md` 已同步说明封禁接口、筛选参数、封禁存储方式和无 schema 变更。
+
+### Not Yet Done
+- `agent_reported`: 未连接真实后端数据库执行管理员登录后的端到端封禁操作；本轮通过单元测试、构建和前端静态渲染冒烟验证。
+- `agent_reported`: 未处理既有未跟踪 `update_time.go`；该文件在本轮开始前已存在，未纳入功能修改。
+
+### Key Decisions Made
+- `agent_reported`: 为满足“不修改数据库结构”，封禁状态复用 `students.pending_notice` 的 JSON payload，不新增字段、表或迁移。
+- `agent_reported`: 为降低对既有通知数据的影响，封禁 payload 保存 `previous_notice`，解封时恢复，避免直接覆盖并丢失管理员座位调整通知。
+- `agent_reported`: 封禁账号旧 token 仍可能存在，因此除登录外，也在注册资料更新、通知确认和座位操作路径上检查封禁状态。
+
+### Files Changed
+- `hard_observed`: `backend/internal/admin/handler.go`
+- `hard_observed`: `backend/internal/admin/postgres.go`
+- `hard_observed`: `backend/internal/admin/service.go`
+- `hard_observed`: `backend/internal/admin/service_test.go`
+- `hard_observed`: `backend/internal/seat/booking.go`
+- `hard_observed`: `backend/internal/seat/booking_test.go`
+- `hard_observed`: `backend/internal/seat/handler.go`
+- `hard_observed`: `backend/internal/seat/postgres_booking.go`
+- `hard_observed`: `backend/internal/student/handler.go`
+- `hard_observed`: `backend/internal/student/service.go`
+- `hard_observed`: `backend/internal/student/service_test.go`
+- `hard_observed`: `docs/api.md`
+- `hard_observed`: `docs/db-schema.md`
+- `hard_observed`: `frontend/src/api.ts`
+- `hard_observed`: `frontend/src/views/AdminView.vue`
+- `hard_observed`: `frontend/src/views/RegisterView.vue`
+- `hard_observed`: `frontend/src/views/SeatsView.vue`
+- `hard_observed`: VibeHub-generated sync/view files under `.vibehub/agent-view/`, `.vibehub/index/`, `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/`, and `.vibehub/state.yaml` were updated by `vibehub sync` and this output append.
+
+### Files Reportedly Read
+- `hard_observed`: `.vibehub/agent-view/current.md`
+- `hard_observed`: `.vibehub/agent-view/current-context.md`
+- `hard_observed`: `.vibehub/agent-view/handoff.md`
+- `hard_observed`: `.vibehub/rules/hard-rules.md`
+- `hard_observed`: `.vibehub/adapters/protocol.md`
+- `hard_observed`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.md`
+- `hard_observed`: `/Users/chenm0m/LocalRepo/LaLaLandShow/.agents/skills/vibehub-sync/SKILL.md`
+- `hard_observed`: `backend/internal/admin/handler.go`
+- `hard_observed`: `backend/internal/admin/postgres.go`
+- `hard_observed`: `backend/internal/admin/service.go`
+- `hard_observed`: `backend/internal/admin/service_test.go`
+- `hard_observed`: `backend/internal/seat/booking.go`
+- `hard_observed`: `backend/internal/seat/handler.go`
+- `hard_observed`: `backend/internal/seat/postgres_booking.go`
+- `hard_observed`: `backend/internal/seat/booking_test.go`
+- `hard_observed`: `backend/internal/student/handler.go`
+- `hard_observed`: `backend/internal/student/model.go`
+- `hard_observed`: `backend/internal/student/postgres.go`
+- `hard_observed`: `backend/internal/student/service.go`
+- `hard_observed`: `backend/internal/student/service_test.go`
+- `hard_observed`: `frontend/src/api.ts`
+- `hard_observed`: `frontend/src/views/AdminView.vue`
+- `hard_observed`: `frontend/src/views/RegisterView.vue`
+- `hard_observed`: `frontend/src/views/SeatsView.vue`
+- `hard_observed`: `docs/api.md`
+- `hard_observed`: `docs/db-schema.md`
+- `hard_observed`: Browser skill instructions at `/Users/chenm0m/.codex/plugins/cache/openai-bundled/browser/26.602.30954/skills/control-in-app-browser/SKILL.md`
+
+### Commands Run
+- `hard_observed`: `pwd && rg --files .vibehub/agent-view .vibehub/rules .vibehub/adapters | sort`
+- `hard_observed`: `git status --short`
+- `hard_observed`: `sed -n '1,220p' .vibehub/agent-view/current.md`
+- `hard_observed`: `sed -n '1,220p' .vibehub/agent-view/current-context.md`
+- `hard_observed`: `sed -n '1,220p' .vibehub/agent-view/handoff.md`
+- `hard_observed`: `sed -n '1,220p' .vibehub/rules/hard-rules.md`
+- `hard_observed`: `sed -n '1,220p' .vibehub/adapters/protocol.md`
+- `hard_observed`: `sed -n '1,220p' .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.md`
+- `hard_observed`: `sed -n '1,220p' /Users/chenm0m/LocalRepo/LaLaLandShow/.agents/skills/vibehub-sync/SKILL.md`
+- `hard_observed`: `sed -n '1,220p' .vibehub/workflow.yaml`
+- `hard_observed`: `vibehub sync /Users/chenm0m/LocalRepo/LaLaLandShow`
+- `hard_observed`: `rg -n "admin|Admin|user|User|student|Student|account|login|booking|reserve|seat|ban|status|page|limit" backend frontend/src docs -S`
+- `hard_observed`: `rg --files backend frontend/src docs | sort`
+- `hard_observed`: Multiple `sed -n` reads of backend admin/student/seat files, frontend API/admin/register/seats views, and docs.
+- `hard_observed`: `gofmt -w backend/internal/admin/handler.go backend/internal/admin/postgres.go backend/internal/admin/service.go backend/internal/admin/service_test.go backend/internal/seat/booking.go backend/internal/seat/booking_test.go backend/internal/seat/handler.go backend/internal/seat/postgres_booking.go backend/internal/student/handler.go backend/internal/student/service.go backend/internal/student/service_test.go`
+- `hard_observed`: `go test ./...` in `backend/`
+- `hard_observed`: `npm --prefix frontend run build`
+- `hard_observed`: `npm run dev -- --host 127.0.0.1` in `frontend/`
+- `hard_observed`: Browser automation opened `http://127.0.0.1:5173/admin` and verified the Students tab renders the new filters and pagination controls.
+- `hard_observed`: `lsof -ti tcp:5173`
+- `hard_observed`: `kill 40871 53340 72251 82616` with escalated permission to stop the local dev server started for verification.
+- `hard_observed`: `git diff --stat`
+- `hard_observed`: `git diff -- ... | sed -n '1,260p'`
+
+### Tests Run
+- `hard_observed`: `go test ./...` in `backend/` passed.
+- `hard_observed`: `npm --prefix frontend run build` passed.
+- `hard_observed`: Browser smoke check passed for `/admin` Students tab controls: registration status, booking status, account status, page size, and pagination rendered.
+
+### Context Still Needed
+- `agent_reported`: User has not confirmed whether VibeHub sync dirty files and the pre-existing untracked `update_time.go` belong to the active task; this remains an unresolved workspace-risk note.
+- `agent_reported`: Production database data shape should be sampled before first real use if there are unexpected `pending_notice` payloads outside known admin adjustment payloads.
+
+### Warnings
+- `hard_observed`: `vibehub sync` returned `needs_attention` because workspace changes existed outside current VibeHub state, HEAD changed, and event/state consistency warnings remain for plan/implement.
+- `hard_observed`: Running `vibehub sync` updated `.vibehub/state.yaml` and generated VibeHub files through the CLI; these were not manually edited.
+- `agent_reported`: Account ban state intentionally mutates the target student's existing `pending_notice` value, but preserves prior notice in JSON for restoration on unban; no schema/storage migration was made.
+
+### Next Session Should
+- `agent_reported`: Test the admin ban/unban flow against a real backend database with one active account, one semi-registered account, and one account that already has an admin seat-adjustment notice.
+- `agent_reported`: Confirm whether to commit VibeHub-generated sync files together with this feature or separate them from the application code changes.
+
+## Session Addendum 2026-06-05 Ban Message and Leave Form Warning
+
+### Completed
+- `user_confirmed`: 用户要求封禁账号再次登录时提示“该账号学号信息真实性存疑，现已封禁、不予预约资格，如需申述请向1203相关负责人反馈”。
+- `hard_observed`: 学生登录封禁错误 `student.ErrAccountBanned` 已改为用户指定文案；学生登录接口会以该错误文案返回 `403`。
+- `hard_observed`: 座位操作封禁错误 `seat.ErrAccountBanned` 已同步改为同一文案；持旧 token 的封禁账号尝试预约/重约/取消/换座时也会收到该提示。
+- `user_confirmed`: 用户要求班级、座号填写页面补充“请正确登记班级座号否则无法正常开公假单，后果自负”。
+- `hard_observed`: `frontend/src/views/RegisterView.vue` 顶部说明和表单提示已补充公假单提醒。
+- `hard_observed`: `docs/api.md` 已同步封禁登录 `403` 的具体返回提示。
+
+### Not Yet Done
+- `agent_reported`: 未连接真实后端进行浏览器登录流程实测；本轮变更通过相关 Go 测试和前端构建验证。
+
+### Key Decisions Made
+- `agent_reported`: 将封禁提示放在后端错误常量中，保证登录失败和旧 token 座位操作失败都能输出一致提示。
+- `agent_reported`: 注册资料页保留既有繁体说明，同时追加用户指定的简体公假单提醒原句。
+
+### Files Changed
+- `hard_observed`: `backend/internal/student/service.go`
+- `hard_observed`: `backend/internal/seat/booking.go`
+- `hard_observed`: `frontend/src/views/RegisterView.vue`
+- `hard_observed`: `docs/api.md`
+- `hard_observed`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/outputs/output.md`
+
+### Files Reportedly Read
+- `hard_observed`: `.vibehub/agent-view/current.md`
+- `hard_observed`: `.vibehub/agent-view/current-context.md`
+- `hard_observed`: `.vibehub/agent-view/handoff.md`
+- `hard_observed`: `.vibehub/rules/hard-rules.md`
+- `hard_observed`: `.vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.md`
+- `hard_observed`: `backend/internal/student/service.go`
+- `hard_observed`: `frontend/src/views/RegisterView.vue`
+
+### Commands Run
+- `hard_observed`: `sed -n '1,220p' .vibehub/agent-view/current.md`
+- `hard_observed`: `sed -n '1,220p' .vibehub/agent-view/current-context.md`
+- `hard_observed`: `sed -n '1,180p' .vibehub/agent-view/handoff.md`
+- `hard_observed`: `sed -n '1,180p' .vibehub/rules/hard-rules.md`
+- `hard_observed`: `sed -n '1,180p' .vibehub/tasks/T-20260529133755-69e7bd66/runs/R-20260529133755-405932d7/context-packs/align.md`
+- `hard_observed`: `rg -n "ErrAccountBanned|account has been banned|学号信息|profile-note|入場資料|无法正常|無法正常|公假" backend frontend/src docs -S`
+- `hard_observed`: `gofmt -w backend/internal/student/service.go backend/internal/seat/booking.go`
+- `hard_observed`: `go test ./internal/student ./internal/seat` in `backend/`
+- `hard_observed`: `npm --prefix frontend run build`
+- `hard_observed`: `git diff --check`
+- `hard_observed`: `git status --short`
+
+### Tests Run
+- `hard_observed`: `go test ./internal/student ./internal/seat` passed.
+- `hard_observed`: `npm --prefix frontend run build` passed.
+- `hard_observed`: `git diff --check` passed.
+
+### Context Still Needed
+- `agent_reported`: 真实封禁账号登录页展示仍可在接入后端数据库后做一次人工确认。
+
+### Warnings
+- `hard_observed`: 工作区仍包含上一轮 VibeHub sync 生成文件和 pre-existing `update_time.go` 未跟踪文件；本轮未处理这些状态项。
+
+### Next Session Should
+- `agent_reported`: 用一个已封禁学生账号登录，确认前端登录页展示完整封禁申述文案。
 - `agent_reported`: 年级筛选使用学生证前三位 `grade_prefix`，班级筛选使用既有 `class_code` 字段，便于和用户提供的学号结构保持一致。
 
 ### Files Changed

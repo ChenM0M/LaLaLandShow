@@ -98,6 +98,8 @@ func writeServiceError(c fiber.Ctx, err error) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	case errors.Is(err, ErrNotFound):
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+	case errors.Is(err, ErrAccountBanned):
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": ErrAccountBanned.Error()})
 	default:
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}

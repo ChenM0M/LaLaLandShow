@@ -21,6 +21,7 @@ type fakeBookingStore struct {
 	seenReleaseFor string
 	seenChangeFor  string
 	seenNewSeatID  int64
+	banned         bool
 }
 
 func (s *fakeBookingStore) GetSnapshot(context.Context, string) (Snapshot, error) {
@@ -58,6 +59,10 @@ func (s *fakeBookingStore) ChangeSeat(_ context.Context, actorStudentID string, 
 		return SeatChange{}, s.changeErr
 	}
 	return s.change, nil
+}
+
+func (s *fakeBookingStore) IsStudentBanned(context.Context, string) (bool, error) {
+	return s.banned, nil
 }
 
 func TestServiceBookValidatesBatch(t *testing.T) {
@@ -143,6 +148,14 @@ func TestServiceBookStoresNormalizedEntries(t *testing.T) {
 	}
 	if got := store.seen[0].StudentID; got != "1121001" {
 		t.Fatalf("stored student id = %q, want normalized id", got)
+	}
+}
+
+func TestServiceBookRejectsBannedActor(t *testing.T) {
+	service := NewService(&fakeBookingStore{banned: true})
+
+	if _, err := service.Book(context.Background(), "1121001", []BookEntry{{SeatID: 1, StudentID: "1121001"}}); !errors.Is(err, ErrAccountBanned) {
+		t.Fatalf("Book(banned) error = %v, want %v", err, ErrAccountBanned)
 	}
 }
 

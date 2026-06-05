@@ -47,6 +47,7 @@ type Store interface {
 	AssignSeat(ctx context.Context, input AssignSeatInput) (SeatDetail, error)
 	LockSeat(ctx context.Context, input LockSeatInput) (SeatDetail, error)
 	ListStudents(ctx context.Context, filter StudentFilter) (StudentList, error)
+	SetStudentBan(ctx context.Context, input StudentBanInput) (StudentRow, error)
 	ListStudentSeatConflicts(ctx context.Context, filter StudentFilter) ([]StudentSeatConflict, error)
 	ListAuditLogs(ctx context.Context, filter AuditFilter) (AuditLogList, error)
 	ListCheckinEvents(ctx context.Context, filter CheckinFilter) (CheckinEventList, error)
@@ -126,11 +127,14 @@ type LockSeatInput struct {
 }
 
 type StudentFilter struct {
-	Page        int
-	PageSize    int
-	GradePrefix string
-	ClassCode   string
-	Search      string
+	Page               int
+	PageSize           int
+	GradePrefix        string
+	ClassCode          string
+	Search             string
+	RegistrationStatus string
+	BookingStatus      string
+	AccountStatus      string
 }
 
 type StudentRow struct {
@@ -144,6 +148,15 @@ type StudentRow struct {
 	BookedAt      *time.Time      `json:"booked_at"`
 	TicketVersion *int            `json:"ticket_version"`
 	ProxyBookedBy *string         `json:"booked_by_student_id"`
+	AccountBanned bool            `json:"account_banned"`
+	BanReason     *string         `json:"ban_reason,omitempty"`
+}
+
+type StudentBanInput struct {
+	StudentID string
+	Banned    bool
+	Reason    string
+	Actor     string
 }
 
 type StudentList struct {
@@ -470,7 +483,20 @@ func (s *Service) ListStudents(ctx context.Context, filter StudentFilter) (Stude
 	filter.GradePrefix = strings.TrimSpace(filter.GradePrefix)
 	filter.ClassCode = strings.TrimSpace(filter.ClassCode)
 	filter.Search = strings.TrimSpace(filter.Search)
+	filter.RegistrationStatus = strings.TrimSpace(filter.RegistrationStatus)
+	filter.BookingStatus = strings.TrimSpace(filter.BookingStatus)
+	filter.AccountStatus = strings.TrimSpace(filter.AccountStatus)
 	return s.store.ListStudents(ctx, filter)
+}
+
+func (s *Service) SetStudentBan(ctx context.Context, input StudentBanInput) (StudentRow, error) {
+	input.StudentID = strings.TrimSpace(input.StudentID)
+	input.Reason = strings.TrimSpace(input.Reason)
+	input.Actor = strings.TrimSpace(input.Actor)
+	if !student.IsValidStudentID(input.StudentID) {
+		return StudentRow{}, student.ErrInvalidStudentID
+	}
+	return s.store.SetStudentBan(ctx, input)
 }
 
 func (s *Service) ListStudentSeatConflicts(ctx context.Context, filter StudentFilter) ([]StudentSeatConflict, error) {

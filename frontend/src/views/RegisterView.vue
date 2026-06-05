@@ -50,7 +50,7 @@ async function submit() {
       <div class="register-copy">
         <p class="caption">STUDENT PROFILE</p>
         <h1>入場資料</h1>
-        <p>確認班級與座號後，即可進入選座。</p>
+        <p>確認班級與座號後，即可進入選座；如未依實際資訊填寫，將無法正常預約。请正确登记班级座号否则无法正常开公假单，后果自负。</p>
       </div>
 
       <div class="mobile-hero-scene" aria-hidden="true"></div>
@@ -80,6 +80,8 @@ async function submit() {
           <label for="display-name">顯示名稱</label>
           <input id="display-name" v-model="displayName" type="text" placeholder="可留空，預設使用學號" />
         </div>
+
+        <p class="profile-note">請依本人實際班級、座號填寫；資料不符者可能無法完成預約或入場核驗。请正确登记班级座号否则无法正常开公假单，后果自负。</p>
 
         <p v-if="error" class="error-msg">{{ error }}</p>
 
@@ -210,6 +212,13 @@ async function submit() {
 
 .profile-ticket label {
   color: rgba(255, 244, 207, 0.62);
+}
+
+.profile-note {
+  margin: 2px 0 14px;
+  color: rgba(255, 244, 207, 0.68);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .profile-ticket input,

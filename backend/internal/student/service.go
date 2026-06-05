@@ -2,6 +2,7 @@ package student
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -14,6 +15,7 @@ var (
 	ErrInvalidProfile    = errors.New("class_code must be 701-705 through 1201-1205; seat_no_in_class must be 1-70")
 	ErrIncompleteProfile = errors.New("student registration is incomplete")
 	ErrNotFound          = errors.New("student not found")
+	ErrAccountBanned     = errors.New("该账号学号信息真实性存疑，现已封禁、不予预约资格，如需申述请向1203相关负责人反馈")
 )
 
 var studentIDPattern = regexp.MustCompile(`^11[0-5][1-4][0-9]{3}$`)
@@ -54,6 +56,9 @@ func (s *Service) Login(ctx context.Context, studentID string) (LoginResult, err
 	if err != nil {
 		return LoginResult{}, fmt.Errorf("find or create student: %w", err)
 	}
+	if IsAccountBanned(student.PendingNotice) {
+		return LoginResult{}, ErrAccountBanned
+	}
 	token, err := s.tokens.GenerateStudentToken(student.StudentID, s.now())
 	if err != nil {
 		return LoginResult{}, fmt.Errorf("generate token: %w", err)
@@ -72,6 +77,9 @@ func (s *Service) Register(ctx context.Context, studentID string, input Register
 		return Student{}, ErrInvalidStudentID
 	}
 	if err := ValidateProfile(input); err != nil {
+		return Student{}, err
+	}
+	if err := s.ensureAccountActive(ctx, studentID); err != nil {
 		return Student{}, err
 	}
 
@@ -96,6 +104,9 @@ func (s *Service) Me(ctx context.Context, studentID string) (Overview, error) {
 func (s *Service) AcknowledgeNotice(ctx context.Context, studentID string) (Student, error) {
 	if !IsValidStudentID(studentID) {
 		return Student{}, ErrInvalidStudentID
+	}
+	if err := s.ensureAccountActive(ctx, studentID); err != nil {
+		return Student{}, err
 	}
 	student, err := s.store.ClearPendingNotice(ctx, studentID)
 	if err != nil {
@@ -128,6 +139,30 @@ func HasCompleteProfile(student Student) bool {
 		IsValidClassCode(*student.ClassCode) &&
 		student.SeatNoInClass != nil &&
 		IsValidSeatNoInClass(*student.SeatNoInClass)
+}
+
+func IsAccountBanned(raw json.RawMessage) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var notice struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &notice); err != nil {
+		return false
+	}
+	return notice.Type == "admin_account_ban"
+}
+
+func (s *Service) ensureAccountActive(ctx context.Context, studentID string) error {
+	overview, err := s.store.GetOverview(ctx, studentID)
+	if err != nil {
+		return fmt.Errorf("get student overview: %w", err)
+	}
+	if IsAccountBanned(overview.Student.PendingNotice) {
+		return ErrAccountBanned
+	}
+	return nil
 }
 
 func normalizeProfile(input RegisterInput) RegisterInput {

@@ -15,6 +15,7 @@ import {
   planRestore,
   restoreBackup,
   setAdminConfig,
+  setAdminStudentBan,
 } from '../api'
 import type { AdminAuditList, AdminCheckinList, AdminSeat, AdminStudentList, AdminStudentSeatConflict, DashboardStats, Staff } from '../api'
 
@@ -52,6 +53,11 @@ const studentFilters = ref({
   grade_prefix: '',
   class_code: '',
   search: '',
+  registration_status: '',
+  booking_status: '',
+  account_status: '',
+  page: 1,
+  page_size: 50,
 })
 
 const zoneLabels: Record<string, string> = {
@@ -104,18 +110,31 @@ const normalizedStudentFilters = computed(() => ({
   grade_prefix: studentFilters.value.grade_prefix.trim(),
   class_code: studentFilters.value.class_code.trim(),
   search: studentFilters.value.search.trim(),
+  registration_status: studentFilters.value.registration_status,
+  booking_status: studentFilters.value.booking_status,
+  account_status: studentFilters.value.account_status,
+  page: studentFilters.value.page,
+  page_size: studentFilters.value.page_size,
 }))
 
 const studentOverview = computed(() => {
   const rows = students.value?.students || []
   const registered = rows.filter(student => !student.need_register).length
+  const banned = rows.filter(student => student.account_banned).length
   return {
     total: students.value?.total ?? 0,
     visible: rows.length,
     registered,
     needRegister: rows.length - registered,
+    banned,
     conflicts: studentConflicts.value.length,
   }
+})
+
+const studentTotalPages = computed(() => {
+  const total = students.value?.total ?? 0
+  const pageSize = students.value?.page_size || studentFilters.value.page_size || 50
+  return Math.max(1, Math.ceil(total / pageSize))
 })
 
 const availableClassOptions = computed(() => {
@@ -230,7 +249,7 @@ async function refreshStudents() {
 }
 
 function resetStudentFilters() {
-  studentFilters.value = { grade_prefix: '', class_code: '', search: '' }
+  studentFilters.value = { grade_prefix: '', class_code: '', search: '', registration_status: '', booking_status: '', account_status: '', page: 1, page_size: 50 }
   refreshStudents()
 }
 
@@ -238,7 +257,38 @@ function updateStudentGradeFilter() {
   if (studentFilters.value.class_code && !studentFilters.value.class_code.startsWith(studentFilters.value.grade_prefix)) {
     studentFilters.value.class_code = ''
   }
+  studentFilters.value.page = 1
   refreshStudents()
+}
+
+function applyStudentFilters() {
+  studentFilters.value.page = 1
+  refreshStudents()
+}
+
+function goStudentPage(page: number) {
+  studentFilters.value.page = Math.min(Math.max(page, 1), studentTotalPages.value)
+  refreshStudents()
+}
+
+async function toggleStudentBan(student: AdminStudentList['students'][number]) {
+  const banned = !student.account_banned
+  const reason = banned ? window.prompt('請輸入封禁原因', student.ban_reason || '資料異常') : ''
+  if (banned && reason === null) return
+  if (!banned && !window.confirm(`確定解除 ${student.student_id} 的封禁嗎？`)) return
+  loading.value = true
+  error.value = ''
+  message.value = ''
+  try {
+    await setAdminStudentBan(student.student_id, { banned, reason: reason || '' })
+    message.value = banned ? '帳號已封禁' : '帳號已解封'
+    await refreshStudents()
+    dashboard.value = await adminDashboard()
+  } catch (e: any) {
+    error.value = e?.response?.data?.error || '帳號狀態更新失敗'
+  } finally {
+    loading.value = false
+  }
 }
 
 async function mutateSeat(kind: 'student' | 'custom' | 'release' | 'lock' | 'unlock') {
@@ -611,8 +661,39 @@ onMounted(() => {
             <span>搜尋</span>
             <input v-model="studentFilters.search" placeholder="學號或姓名" @keyup.enter="refreshStudents" />
           </label>
+          <label>
+            <span>註冊狀態</span>
+            <select v-model="studentFilters.registration_status" @change="applyStudentFilters">
+              <option value="">全部</option>
+              <option value="registered">已註冊</option>
+              <option value="need_register">待補全</option>
+            </select>
+          </label>
+          <label>
+            <span>訂座狀態</span>
+            <select v-model="studentFilters.booking_status" @change="applyStudentFilters">
+              <option value="">全部</option>
+              <option value="booked">已訂座</option>
+              <option value="unbooked">未訂座</option>
+            </select>
+          </label>
+          <label>
+            <span>帳號狀態</span>
+            <select v-model="studentFilters.account_status" @change="applyStudentFilters">
+              <option value="">全部</option>
+              <option value="active">正常</option>
+              <option value="banned">已封禁</option>
+            </select>
+          </label>
+          <label>
+            <span>每頁</span>
+            <select v-model.number="studentFilters.page_size" @change="applyStudentFilters">
+              <option :value="50">50</option>
+              <option :value="100">100</option>
+            </select>
+          </label>
           <div class="filter-actions">
-            <button class="btn-primary" :disabled="loading" @click="refreshStudents">篩選</button>
+            <button class="btn-primary" :disabled="loading" @click="applyStudentFilters">篩選</button>
             <button class="btn-outline" :disabled="loading" @click="resetStudentFilters">清除</button>
           </div>
         </div>
@@ -620,6 +701,7 @@ onMounted(() => {
           <div class="metric"><span class="caption">符合筆數</span><strong class="metric-value">{{ studentOverview.total }}</strong></div>
           <div class="metric"><span class="caption">本頁顯示</span><strong class="metric-value">{{ studentOverview.visible }}</strong></div>
           <div class="metric"><span class="caption">已註冊</span><strong class="metric-value">{{ studentOverview.registered }}</strong></div>
+          <div class="metric"><span class="caption">本頁封禁</span><strong class="metric-value">{{ studentOverview.banned }}</strong></div>
           <div class="metric"><span class="caption">異常組</span><strong class="metric-value">{{ studentOverview.conflicts }}</strong></div>
         </div>
         <div class="conflict-panel">
@@ -647,17 +729,33 @@ onMounted(() => {
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>學號</th><th>班級</th><th>座號</th><th>狀態</th><th>座位</th></tr></thead>
+            <thead><tr><th>學號</th><th>班級</th><th>座號</th><th>註冊</th><th>帳號</th><th>座位</th><th>操作</th></tr></thead>
             <tbody>
               <tr v-for="student in students?.students || []" :key="student.student_id">
                 <td>{{ student.student_id }}</td>
                 <td>{{ student.class_code || '-' }}</td>
                 <td>{{ student.seat_no_in_class || '-' }}</td>
                 <td><span class="status-pill" :class="student.need_register ? 'warn' : 'good'">{{ student.need_register ? '待補全' : '已註冊' }}</span></td>
+                <td>
+                  <span class="status-pill" :class="student.account_banned ? 'warn' : 'good'">
+                    {{ student.account_banned ? '已封禁' : '正常' }}
+                  </span>
+                  <small v-if="student.ban_reason" class="ban-reason">{{ student.ban_reason }}</small>
+                </td>
                 <td>{{ student.seat_id || '-' }}</td>
+                <td>
+                  <button class="table-action" :class="{ danger: !student.account_banned }" :disabled="loading" @click="toggleStudentBan(student)">
+                    {{ student.account_banned ? '解封' : '封禁' }}
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="student-pagination">
+          <button class="btn-outline" :disabled="loading || studentFilters.page <= 1" @click="goStudentPage(studentFilters.page - 1)">上一頁</button>
+          <span>第 {{ students?.page || studentFilters.page }} / {{ studentTotalPages }} 頁</span>
+          <button class="btn-outline" :disabled="loading || studentFilters.page >= studentTotalPages" @click="goStudentPage(studentFilters.page + 1)">下一頁</button>
         </div>
       </section>
 
@@ -962,7 +1060,7 @@ onMounted(() => {
 
 .student-filter-bar {
   display: grid;
-  grid-template-columns: minmax(120px, 0.7fr) minmax(150px, 1fr) minmax(180px, 1.2fr) auto;
+  grid-template-columns: repeat(4, minmax(120px, 1fr)) auto;
   gap: 12px;
   align-items: end;
   padding: 14px;
@@ -995,6 +1093,36 @@ onMounted(() => {
 .filter-actions {
   display: flex;
   gap: 10px;
+}
+
+.ban-reason {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.table-action {
+  min-width: 58px;
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--cream);
+  cursor: pointer;
+}
+
+.table-action.danger {
+  border-color: rgba(252, 165, 165, 0.5);
+  color: #fecaca;
+}
+
+.student-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  color: var(--muted);
 }
 
 .student-overview {
@@ -1106,6 +1234,10 @@ onMounted(() => {
 
   .filter-actions {
     grid-column: 1 / -1;
+  }
+
+  .student-pagination {
+    justify-content: center;
   }
 }
 

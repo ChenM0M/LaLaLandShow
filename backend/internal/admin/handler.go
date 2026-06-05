@@ -31,6 +31,7 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	group.Post("/seats/:id/assign", h.assignSeat)
 	group.Post("/seats/:id/lock", h.lockSeat)
 	group.Get("/students", h.listStudents)
+	group.Post("/students/:id/ban", h.setStudentBan)
 	group.Get("/students/conflicts", h.listStudentSeatConflicts)
 	group.Get("/audit-logs", h.listAuditLogs)
 	group.Get("/checkin-events", h.listCheckinEvents)
@@ -58,6 +59,11 @@ type assignSeatRequest struct {
 type lockSeatRequest struct {
 	Lock        bool    `json:"lock"`
 	BlockReason *string `json:"block_reason"`
+}
+
+type studentBanRequest struct {
+	Banned bool   `json:"banned"`
+	Reason string `json:"reason"`
 }
 
 type configRequest struct {
@@ -150,16 +156,40 @@ func (h *Handler) lockSeat(c fiber.Ctx) error {
 
 func (h *Handler) listStudents(c fiber.Ctx) error {
 	list, err := h.service.ListStudents(c.Context(), StudentFilter{
-		Page:        queryInt(c, "page", 1),
-		PageSize:    queryInt(c, "page_size", 50),
-		GradePrefix: c.Query("grade_prefix"),
-		ClassCode:   c.Query("class_code"),
-		Search:      c.Query("search"),
+		Page:               queryInt(c, "page", 1),
+		PageSize:           queryInt(c, "page_size", 50),
+		GradePrefix:        c.Query("grade_prefix"),
+		ClassCode:          c.Query("class_code"),
+		Search:             c.Query("search"),
+		RegistrationStatus: c.Query("registration_status"),
+		BookingStatus:      c.Query("booking_status"),
+		AccountStatus:      c.Query("account_status"),
 	})
 	if err != nil {
 		return writeServiceError(c, err)
 	}
 	return c.JSON(list)
+}
+
+func (h *Handler) setStudentBan(c fiber.Ctx) error {
+	staff, ok := auth.Staff(c)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing authenticated staff"})
+	}
+	var req studentBanRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid JSON body"})
+	}
+	studentRow, err := h.service.SetStudentBan(c.Context(), StudentBanInput{
+		StudentID: c.Params("id"),
+		Banned:    req.Banned,
+		Reason:    req.Reason,
+		Actor:     staff.Username,
+	})
+	if err != nil {
+		return writeServiceError(c, err)
+	}
+	return c.JSON(fiber.Map{"student": studentRow})
 }
 
 func (h *Handler) listStudentSeatConflicts(c fiber.Ctx) error {
@@ -351,7 +381,7 @@ func writeServiceError(c fiber.Ctx, err error) error {
 		errors.Is(err, ErrInvalidRestoreToken),
 		errors.Is(err, student.ErrInvalidStudentID):
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
-	case errors.Is(err, ErrSeatNotFound), errors.Is(err, ErrConfigNotFound):
+	case errors.Is(err, ErrSeatNotFound), errors.Is(err, ErrConfigNotFound), errors.Is(err, student.ErrNotFound):
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 	case errors.Is(err, ErrAssignmentConflict):
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": ErrAssignmentConflict.Error()})
