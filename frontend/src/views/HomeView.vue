@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import { getConfig } from '../api'
+import { getConfig, getWindowState } from '../api'
 import type { PublicConfig } from '../api'
 import gsap from 'gsap'
 import ScrollTrigger from 'gsap/ScrollTrigger'
@@ -15,6 +15,29 @@ let actObserver: IntersectionObserver | null = null
 const auth = useAuthStore()
 const config = ref<PublicConfig | null>(null)
 const countdownParts = ref({ d: '0', h: '00', m: '00', s: '00', open: false })
+
+// --- Booking QR Popup ---
+const POPUP_VERSION = 'v2026-06-07' // Change this to reset counters on future updates
+const POPUP_STORAGE_KEY = `booking_popup_${POPUP_VERSION}`
+const POPUP_MAX_SHOWS = 3
+const showBookingPopup = ref(false)
+
+function initBookingPopup(windowState: string) {
+  // Only show during the booking-related phases: before_open or open
+  if (windowState !== 'before_open' && windowState !== 'open') return
+
+  const visitCount = parseInt(localStorage.getItem(POPUP_STORAGE_KEY) || '0', 10)
+  if (visitCount >= POPUP_MAX_SHOWS) return
+
+  localStorage.setItem(POPUP_STORAGE_KEY, String(visitCount + 1))
+  // Small delay so popup appears after the page has rendered
+  setTimeout(() => { showBookingPopup.value = true }, 600)
+}
+
+function closeBookingPopup() {
+  showBookingPopup.value = false
+}
+// --- End Booking QR Popup ---
 
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 let fadeObserver: IntersectionObserver | null = null
@@ -129,7 +152,7 @@ const stagePhotos = [
 
 
 const ctaTarget = computed(() => (auth.token ? '/seats' : '/login'))
-const venue = computed(() => config.value?.venue || '夢想劇場')
+const venue = computed(() => config.value?.venue || 'School Auditorium')
 
 const nowTime = ref(Date.now())
 
@@ -336,6 +359,16 @@ onMounted(async () => {
     config.value = null
   }
 
+  // Fetch window state and maybe show booking popup
+  try {
+    const ws = await getWindowState()
+    initBookingPopup(ws.state)
+  } catch {
+    // If we can't fetch window state, still try to show popup
+    // (fallback: assume booking phase)
+    initBookingPopup('before_open')
+  }
+
   updateCountdown()
   countdownTimer = setInterval(updateCountdown, 1000)
 
@@ -356,6 +389,25 @@ onUnmounted(() => {
 
 <template>
   <main class="home-wrapper">
+    <!-- Booking WeChat QR Popup -->
+    <Transition name="popup-fade">
+      <div v-if="showBookingPopup" class="booking-popup-overlay" @click.self="closeBookingPopup">
+        <div class="booking-popup">
+          <button class="booking-popup__close" @click="closeBookingPopup" aria-label="關閉">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <h3 class="booking-popup__title">家長預約，請加微信</h3>
+          <div class="booking-popup__qr-wrapper">
+            <img src="/assets/images/wechat-qr-booking.png" alt="微信二維碼" class="booking-popup__qr" />
+          </div>
+          <p class="booking-popup__desc">
+            家長朋友們如果希望預約觀看現可通過添加此微信的方式進行溝通和選座，微信號：<strong>ylt_siennaa</strong>。添加好友請備註<strong>話劇預約+XXXX班級XXX家長</strong>
+          </p>
+        </div>
+      </div>
+    </Transition>
     <div class="film-grain" aria-hidden="true"></div>
 
     <section id="hero" class="hero">
@@ -1329,6 +1381,168 @@ onUnmounted(() => {
 
   .hero-cta:hover {
     transform: translateY(-2px);
+  }
+}
+
+/* ========== Booking QR Popup ========== */
+.booking-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 8, 39, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 1rem;
+}
+
+.booking-popup {
+  position: relative;
+  width: min(420px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  background:
+    linear-gradient(160deg, rgba(21, 20, 69, 0.96), rgba(7, 11, 36, 0.97));
+  border: 1px solid rgba(247, 242, 223, 0.18);
+  border-radius: 16px;
+  padding: 2.4rem 2rem 2rem;
+  box-shadow:
+    0 2rem 5rem rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 214, 107, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  text-align: center;
+  animation: popup-enter 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.booking-popup__close {
+  position: absolute;
+  top: 0.8rem;
+  right: 0.8rem;
+  width: 2.2rem;
+  height: 2.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(247, 242, 223, 0.15);
+  border-radius: 50%;
+  background: rgba(7, 11, 36, 0.6);
+  color: rgba(247, 242, 223, 0.7);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.booking-popup__close:hover {
+  background: rgba(247, 242, 223, 0.12);
+  color: #f7f2df;
+  border-color: rgba(247, 242, 223, 0.3);
+}
+
+.booking-popup__title {
+  font-family: var(--font-ui);
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: rgba(255, 214, 107, 0.94);
+  letter-spacing: 0.22em;
+  margin: 0 0 1.4rem;
+  text-shadow: 0 2px 12px rgba(255, 214, 107, 0.18);
+}
+
+.booking-popup__qr-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.4rem;
+}
+
+.booking-popup__qr {
+  width: min(260px, 65vw);
+  height: auto;
+  border-radius: 12px;
+  border: 2px solid rgba(247, 242, 223, 0.12);
+  box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.3);
+}
+
+.booking-popup__desc {
+  font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans SC', 'PingFang SC', sans-serif;
+  font-size: 0.88rem;
+  line-height: 1.85;
+  color: rgba(247, 242, 223, 0.78);
+  margin: 0;
+  text-align: left;
+  padding: 0 0.2rem;
+}
+
+.booking-popup__desc strong {
+  color: rgba(255, 238, 205, 0.95);
+  font-weight: 600;
+}
+
+/* Popup animation */
+@keyframes popup-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.popup-fade-enter-active {
+  transition: opacity 0.35s ease;
+}
+.popup-fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+.popup-fade-enter-from,
+.popup-fade-leave-to {
+  opacity: 0;
+}
+.popup-fade-leave-to .booking-popup {
+  transform: scale(0.95);
+  transition: transform 0.25s ease;
+}
+
+/* ---- Responsive: Mobile ---- */
+@media (max-width: 480px) {
+  .booking-popup {
+    width: calc(100vw - 1.5rem);
+    padding: 2rem 1.2rem 1.6rem;
+    border-radius: 12px;
+  }
+
+  .booking-popup__title {
+    font-size: 1.15rem;
+  }
+
+  .booking-popup__qr {
+    width: min(220px, 58vw);
+  }
+
+  .booking-popup__desc {
+    font-size: 0.82rem;
+    line-height: 1.75;
+  }
+}
+
+/* ---- Responsive: Tablet ---- */
+@media (min-width: 481px) and (max-width: 768px) {
+  .booking-popup {
+    width: min(380px, calc(100vw - 2rem));
+  }
+}
+
+/* ---- Responsive: Large screens ---- */
+@media (min-width: 1200px) {
+  .booking-popup {
+    width: 440px;
+    padding: 2.8rem 2.4rem 2.2rem;
+  }
+
+  .booking-popup__qr {
+    width: 280px;
   }
 }
 </style>
