@@ -121,9 +121,9 @@ const isLeftAisleRoute = computed(() => {
 const aisleHint = computed(() => isLeftAisleRoute.value ? '右側過道' : '左側過道')
 
 const sideHint = computed(() => {
-  if (activeZone.value === 'left') return '入口在左下，舞台在前方。沿前方過道到左區，再往上找。'
-  if (activeZone.value === 'right') return '入口在左下，舞台在前方。沿右側過道往上找。'
-  if (activeZone.value === 'middle') return '入口在左下，舞台在前方。沿前方過道到中區，再往上找。'
+  if (activeZone.value === 'left') return '入口在右下，舞台在前方。沿左側過道往上找。'
+  if (activeZone.value === 'right') return '入口在右下，舞台在前方。沿前方過道到右區，再往上找。'
+  if (activeZone.value === 'middle') return '入口在右下，舞台在前方。沿前方過道到中區，再往上找。'
   return '到入口出示票券，現場人員會帶你找位置。'
 })
 
@@ -143,8 +143,8 @@ const guidePath = computed(() => {
 
   const aisleX = isLeftAisleRoute.value ? 254 : 626
   
-  // Start at Entrance (50, 750), go to Aisle bottom (aisleX, 750), up to row (aisleX, targetY), to seat (targetX, targetY)
-  return `M 50 750 L ${aisleX} 750 L ${aisleX} ${targetY} L ${targetX} ${targetY}`
+  // Start at Entrance (830, 750), go to Aisle bottom (aisleX, 750), up to row (aisleX, targetY), to seat (targetX, targetY)
+  return `M 830 750 L ${aisleX} 750 L ${aisleX} ${targetY} L ${targetX} ${targetY}`
 })
 
 function numberParam(value: unknown) {
@@ -331,7 +331,7 @@ onMounted(async () => {
             </g>
 
             <!-- Entrance Marker -->
-            <g class="entry-marker" transform="translate(50, 750)">
+            <g class="entry-marker" transform="translate(830, 750)">
               <rect x="-26" y="-14" width="52" height="28" rx="6" class="entry-box" />
               <text x="0" y="4" class="entry-label" text-anchor="middle">入口</text>
             </g>
