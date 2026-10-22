@@ -59,4 +59,6 @@ fi
 redis-server --appendonly yes --dir "$REDIS_DIR" --bind 127.0.0.1 --port 6379 &
 REDIS_PID="$!"
 
+until [ "$(redis-cli -h 127.0.0.1 -p 6379 ping 2>/dev/null)" = PONG ]; do sleep 0.5; done
+
 exec /app/lalalandshow
